@@ -4,6 +4,22 @@ import SwiftUI
 final class GlossNSTextView: NSTextView {
     var onImage: ((Data) -> Void)?
     var onPasteText: (() -> Void)?
+    var onDoubleClickWord: (() -> Void)?
+
+    // super の mouseDown はマウスを離すまで戻らないので、戻った時点で選択は確定している
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        if event.clickCount == 2, selectedRange().length > 0 { onDoubleClickWord?() }
+    }
+
+    // プレーンテキストの NSTextView は画像の型を読めないので、画像だけのクリップボード
+    // (⌘⇧⌃4 のスクショなど)だと ⌘V が無効になって paste(_:) まで来ない
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(paste(_:)), isEditable, NSImage.canInit(with: NSPasteboard.general) {
+            return true
+        }
+        return super.validateUserInterfaceItem(item)
+    }
 
     override func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
@@ -66,6 +82,7 @@ struct GlossTextView: NSViewRepresentable {
     var onSelect: (String) -> Void = { _ in }
     var onImage: ((Data) -> Void)?
     var onPasteText: (() -> Void)?
+    var onDoubleClickWord: (() -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -102,6 +119,7 @@ struct GlossTextView: NSViewRepresentable {
         textView.isSelectable = true
         textView.onImage = onImage
         textView.onPasteText = onPasteText
+        textView.onDoubleClickWord = onDoubleClickWord
         if textView.string != text {
             textView.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: Self.attributes))
         }

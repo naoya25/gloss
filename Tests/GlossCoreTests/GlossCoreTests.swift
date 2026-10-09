@@ -67,3 +67,51 @@ import Testing
     #expect(settings.model == "gemini-3.1-flash-lite")
     #expect(settings.jaiUserID == "a@b.c")
 }
+
+@Test func oldWordsAndSettingsStillDecode() throws {
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let words = #"[{"id":"7C9E6679-7425-40DE-944B-E07FC1F90AE7","date":"2026-10-09T09:00:00Z","term":"take for granted","note":"当然と思う","context":"She took it for granted."}]"#
+    let decoded = try decoder.decode([WordEntry].self, from: Data(words.utf8))
+    #expect(decoded[0].flipCount == 0)
+    #expect(decoded[0].masteryLevel == .notYet)
+    #expect(decoded[0].text(for: .japanese) == "take for granted")
+
+    let settings = #"{"engine":"openai","model":"m","jaiUserID":"","target":"auto"}"#
+    let decodedSettings = try decoder.decode(AppSettings.self, from: Data(settings.utf8))
+    #expect(decodedSettings.engine == .openai)
+    #expect(decodedSettings.wordSort == .stale)
+}
+
+@Test func cardPairIsParsed() throws {
+    let pair = try #require(Prompts.parseCardPair("EN: take for granted\nJA: 当然と思う\nEX: Don't take me for granted.\nEXJA: わたしを当たり前だと思わないで。"))
+    #expect(pair.english == "take for granted")
+    #expect(pair.japanese == "当然と思う")
+    #expect(pair.example == "Don't take me for granted.")
+    #expect(pair.exampleTranslation == "わたしを当たり前だと思わないで。")
+    #expect(Prompts.parseCardPair("EN: a\nJA: あ")?.example == "")
+    #expect(Prompts.parseCardPair("当然と思う") == nil)
+}
+
+@Test func wordsAreSortedForReview() {
+    var old = WordEntry(term: "old", note: "", context: "")
+    old.date = Date(timeIntervalSince1970: 0)
+    var flipped = WordEntry(term: "flipped", note: "", context: "")
+    flipped.recordFlip(at: Date(timeIntervalSince1970: 100))
+    flipped.mastery = .known
+    var unsure = WordEntry(term: "unsure", note: "", context: "")
+    unsure.recordFlip(at: Date(timeIntervalSince1970: 50))
+    unsure.recordFlip(at: Date(timeIntervalSince1970: 60))
+    unsure.mastery = .unsure
+    let words = [flipped, unsure, old]
+    #expect(words.sorted(by: .stale).map(\.term) == ["old", "unsure", "flipped"])
+    #expect(words.sorted(by: .fewestFlips).map(\.term) == ["old", "flipped", "unsure"])
+    #expect(words.sorted(by: .mastery).map(\.term) == ["old", "unsure", "flipped"])
+}
+
+@Test func keychainAccountAndQuotingAreHandled() {
+    let attributes = "keychain: \"/Users/me/Library/Keychains/login.keychain-db\"\n    \"acct\"<blob>=\"trapop\"\n    \"svce\"<blob>=\"trapop-jai\""
+    #expect(Keychain.account(in: attributes) == "trapop")
+    #expect(Keychain.account(in: "\"acct\"<blob>=<NULL>") == nil)
+    #expect(Keychain.quote(#"a"b\c"#) == #""a\"b\\c""#)
+}

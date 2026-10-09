@@ -25,6 +25,14 @@ public struct WordEntry: Codable, Identifiable, Hashable, Sendable {
     public var term: String
     public var note: String
     public var context: String
+    // ここから下はフラッシュカード用。古い words.json には無いので Optional にして、無くても読めるようにする
+    public var english: String?
+    public var japanese: String?
+    public var example: String?
+    public var exampleTranslation: String?
+    public var flips: Int?
+    public var lastReviewed: Date?
+    public var mastery: Mastery?
 
     public init(term: String, note: String, context: String) {
         self.term = term
@@ -38,8 +46,21 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var model: String = Engine.jai.defaultModel
     public var jaiUserID: String = ""
     public var target: TranslationTarget = .auto
+    public var cardFace: CardFace = .english
+    public var wordSort: WordSort = .stale
 
     public init() {}
+
+    // 項目を足しても古い settings.json を読めるように、無いキーは既定値のままにする
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        engine = try container.decodeIfPresent(Engine.self, forKey: .engine) ?? engine
+        model = try container.decodeIfPresent(String.self, forKey: .model) ?? model
+        jaiUserID = try container.decodeIfPresent(String.self, forKey: .jaiUserID) ?? jaiUserID
+        target = try container.decodeIfPresent(TranslationTarget.self, forKey: .target) ?? target
+        cardFace = try container.decodeIfPresent(CardFace.self, forKey: .cardFace) ?? cardFace
+        wordSort = try container.decodeIfPresent(WordSort.self, forKey: .wordSort) ?? wordSort
+    }
 
     // TraPoP の設定(com.naoya-otsuka.trapop/config.json)を初回だけ引き継ぐ
     public static func importingTraPoP(from url: URL) -> AppSettings {

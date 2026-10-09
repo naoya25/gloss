@@ -10,14 +10,20 @@ struct ContentView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 320)
         } detail: {
-            if model.showsWords {
-                WordsView()
-            } else {
-                TranslateView()
+            Group {
+                if model.showsWords {
+                    WordsView()
+                } else {
+                    TranslateView()
+                }
             }
+            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         }
         .inspector(isPresented: $model.isAskOpen) {
+            // 中身の最小サイズが質問のたびに変わると、分割ビューの制約更新が止まらず落ちる。
+            // 最小サイズを 0 に固定して、列の幅は inspectorColumnWidth だけで決める
             AskPanel()
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                 .inspectorColumnWidth(min: 280, ideal: 340, max: 460)
         }
         .toolbar {
@@ -116,7 +122,8 @@ struct TranslateView: View {
                     text: $model.sourceText,
                     onSelect: model.select,
                     onImage: model.setImage,
-                    onPasteText: model.didPasteText
+                    onPasteText: model.didPasteText,
+                    onDoubleClickWord: model.askAboutSelection
                 )
                 if model.sourceText.isEmpty {
                     Text(model.sourceImage == nil ? "文章か画像を ⌘V で貼り付け" : "画像の文字がここに書き起こされます")
@@ -161,7 +168,12 @@ struct TranslateView: View {
 
     private var result: some View {
         ZStack {
-            GlossTextView(text: .constant(model.translation), isEditable: false, onSelect: model.select)
+            GlossTextView(
+                text: .constant(model.translation),
+                isEditable: false,
+                onSelect: model.select,
+                onDoubleClickWord: model.askAboutSelection
+            )
 
             if let error = model.translationError {
                 VStack(spacing: 12) {
@@ -172,7 +184,7 @@ struct TranslateView: View {
                 }
                 .padding(24)
             } else if model.translation.isEmpty && !model.isTranslating {
-                Text("訳文の単語を選ぶと、意味を質問できます")
+                Text("単語をダブルクリックすると、意味を質問できます")
                     .font(.callout)
                     .foregroundStyle(.tertiary)
                     .allowsHitTesting(false)
@@ -205,7 +217,7 @@ struct AskPanel: View {
             ContentUnavailableView(
                 "語句を選んで質問",
                 systemImage: "questionmark.bubble",
-                description: Text("原文か訳文の単語を選んで ⌘L を押すと、ここで意味や使い方を聞けます")
+                description: Text("原文か訳文の単語をダブルクリックすると、ここで意味や使い方を聞けます。熟語はドラッグで選んで ⌘L")
             )
         } else {
             VStack(alignment: .leading, spacing: 0) {
@@ -244,11 +256,15 @@ struct AskPanel: View {
                     .textSelection(.enabled)
                     .lineLimit(3)
                 Spacer()
-                Button(action: model.saveFocus) {
-                    Label(model.isFocusSaved ? "保存済み" : "単語帳に保存",
+                // 最初の答えが出た時点で自動保存されるので、ボタンは外す/戻すの切り替えだけ
+                Button {
+                    model.isFocusSaved ? model.removeFocus() : model.saveFocus()
+                } label: {
+                    Label(model.isFocusSaved ? "単語帳に保存済み" : "単語帳に戻す",
                           systemImage: model.isFocusSaved ? "bookmark.fill" : "bookmark")
                 }
-                .disabled(model.isAsking || model.thread.allSatisfy { $0.role != .assistant || $0.text.isEmpty })
+                .help(model.isFocusSaved ? "クリックで単語帳から外す" : "クリックで単語帳に保存")
+                .disabled(model.thread.allSatisfy { $0.role != .assistant || $0.text.isEmpty })
             }
             HStack(spacing: 6) {
                 ForEach(Prompts.quickQuestions) { quick in
@@ -299,35 +315,190 @@ struct WordsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if model.words.isEmpty {
-            ContentUnavailableView(
-                "単語帳はまだ空です",
-                systemImage: "book.closed",
-                description: Text("質問した語句を「単語帳に保存」すると、ここに並びます")
-            )
-        } else {
-            List {
-                ForEach(model.words) { word in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(word.term)
-                            .font(.headline)
-                        if !word.context.isEmpty {
-                            Text(word.context)
-                                .font(.callout)
-                                .italic()
-                                .foregroundStyle(.secondary)
+        @Bindable var model = model
+        Group {
+            if model.words.isEmpty {
+                ContentUnavailableView(
+                    "単語帳はまだ空です",
+                    systemImage: "book.closed",
+                    description: Text("単語をダブルクリックして質問すると、ここに自動で並びます")
+                )
+            } else {
+                ScrollView {
+                    // 横長のカードを1列に並べる。幅は読みやすい長さで止める
+                    LazyVStack(spacing: 12) {
+                        ForEach(model.orderedWords) { word in
+                            WordCard(word: word, face: model.settings.cardFace, isOpen: model.openCardID == word.id)
                         }
-                        Text(LocalizedStringKey(word.note))
-                            .font(.callout)
-                            .lineLimit(4)
                     }
-                    .padding(.vertical, 6)
-                    .textSelection(.enabled)
+                    .frame(maxWidth: 720)
+                    .padding(20)
+                    .frame(maxWidth: .infinity)
                 }
-                .onDelete(perform: model.deleteWords)
             }
-            .listStyle(.inset)
         }
+        .toolbar {
+            ToolbarItem {
+                Picker("表に出す言語", selection: $model.settings.cardFace) {
+                    ForEach(CardFace.allCases) { face in
+                        Text(face.label).tag(face)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .help("カードの表に出す言語")
+            }
+            ToolbarItem {
+                Menu {
+                    Picker("並び替え", selection: Binding(get: { model.settings.wordSort }, set: model.setWordSort)) {
+                        ForEach(WordSort.allCases) { order in
+                            Text(order.label).tag(order)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label(model.settings.wordSort.label, systemImage: "arrow.up.arrow.down")
+                }
+                .help("並び替え")
+            }
+        }
+    }
+}
+
+struct WordCard: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let word: WordEntry
+    let face: CardFace
+    let isOpen: Bool
+
+    private var backFace: CardFace { face == .english ? .japanese : .english }
+
+    var body: some View {
+        // 中身の多い裏でカードの大きさを決め、表はその上に重ねて同じ大きさにする
+        back
+            .opacity(isOpen ? 1 : 0)
+            .rotation3DEffect(.degrees(reduceMotion ? 0 : (isOpen ? 0 : -180)), axis: (0, 1, 0))
+            .overlay {
+                front
+                    .opacity(isOpen ? 0 : 1)
+                    .rotation3DEffect(.degrees(reduceMotion ? 0 : (isOpen ? 180 : 0)), axis: (0, 1, 0))
+            }
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .onTapGesture { model.flipCard(word.id) }
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(duration: 0.4), value: isOpen)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(isOpen ? "表に戻す" : "裏返して答えを見る")
+        .contextMenu {
+            Button("単語帳から削除", role: .destructive) { model.deleteWord(word.id) }
+        }
+    }
+
+    private var front: some View {
+        CardSurface {
+            HStack(alignment: .center, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(word.hasCardPair ? word.text(for: face) : word.term)
+                        .font(.title2.weight(.semibold))
+                        .lineLimit(2)
+                    if !word.isCardComplete {
+                        Text("訳と例文を作成中…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 16)
+                stats
+            }
+        }
+    }
+
+    private var back: some View {
+        CardSurface {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(word.hasCardPair ? word.text(for: backFace) : word.term)
+                        .font(.title3.weight(.semibold))
+                        .lineLimit(2)
+                    Spacer(minLength: 16)
+                    Picker("覚えた度合い", selection: Binding(
+                        get: { word.masteryLevel },
+                        set: { model.setMastery($0, for: word.id) }
+                    )) {
+                        ForEach(Mastery.allCases) { level in
+                            Text(level.label).tag(level)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .fixedSize()
+                }
+                if !word.context.isEmpty {
+                    CardLine(label: "用例", text: word.context, translation: nil)
+                }
+                if let example = word.example, !example.isEmpty {
+                    CardLine(label: "例文", text: example, translation: word.exampleTranslation)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var stats: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Text(word.masteryLevel.label)
+                .font(.caption.weight(.medium))
+            Group {
+                if let date = word.lastReviewed {
+                    Text("最後にめくった日 \(date.formatted(.dateTime.year().month().day()))")
+                } else {
+                    Text("まだめくっていない")
+                }
+                Text("めくった回数 \(word.flipCount)回")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+        }
+    }
+}
+
+struct CardLine: View {
+    let label: String
+    let text: String
+    let translation: String?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 32, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(text)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let translation, !translation.isEmpty {
+                    Text(translation)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+}
+
+struct CardSurface<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
     }
 }
 
@@ -349,13 +520,46 @@ struct SettingsView: View {
             if model.settings.engine == .jai {
                 TextField("ユーザーID", text: $model.settings.jaiUserID, prompt: Text("会社のメールアドレス"))
             }
-            LabeledContent("API キー") {
-                let service = model.settings.engine.keychainService
-                Text(Keychain.hasKey(service: service) ? "Keychain に保存済み(\(service))" : "未登録(\(service))")
-                    .foregroundStyle(.secondary)
-            }
+            APIKeyField(service: model.settings.engine.keychainService)
+                .id(model.settings.engine)
         }
         .formStyle(.grouped)
         .frame(width: 480)
+    }
+}
+
+// 入力したキーは Keychain に保存する。保存済みのキーは画面に出さない
+struct APIKeyField: View {
+    let service: String
+    @State private var draft = ""
+    @State private var isSaved = false
+    @State private var failed = false
+
+    var body: some View {
+        LabeledContent("API キー") {
+            HStack(spacing: 8) {
+                SecureField("API キー", text: $draft, prompt: Text(isSaved ? "保存済み(変えるときだけ入力)" : "貼り付けて保存"))
+                    .labelsHidden()
+                    .onSubmit(save)
+                Button("保存", action: save)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .task { isSaved = Keychain.hasKey(service: service) }
+        if failed {
+            Text("Keychain に保存できませんでした")
+                .font(.caption)
+                .foregroundStyle(.red)
+        } else {
+            Text(isSaved ? "Keychain に保存済み(\(service))" : "未登録(\(service))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func save() {
+        failed = !Keychain.setAPIKey(draft, service: service)
+        if !failed { draft = "" }
+        isSaved = Keychain.hasKey(service: service)
     }
 }

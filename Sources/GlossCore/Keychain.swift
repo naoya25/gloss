@@ -13,17 +13,49 @@ public enum Keychain {
         run(["find-generic-password", "-s", service]) != nil
     }
 
-    private static func run(_ arguments: [String]) -> String? {
+    // 既にある項目(TraPoP が作ったもの)はアカウント名を合わせて上書きする。
+    // アカウント名が違うと別の項目が増えて、読むときに古いキーが返ってしまう
+    @discardableResult
+    public static func setAPIKey(_ key: String, service: String) -> Bool {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let account = run(["find-generic-password", "-s", service]).flatMap(account(in:)) ?? "gloss"
+        // キーをコマンドライン引数に載せると ps で見えるので、security -i の標準入力で渡す
+        let command = "add-generic-password -U -s \(quote(service)) -a \(quote(account)) -w \(quote(trimmed))\n"
+        guard run(["-i"], input: command) != nil else { return false }
+        return apiKey(service: service) == trimmed
+    }
+
+    static func account(in attributes: String) -> String? {
+        guard let line = attributes.split(separator: "\n").first(where: { $0.contains("\"acct\"<blob>=") }),
+              let start = line.firstIndex(of: "=")
+        else { return nil }
+        let value = line[line.index(after: start)...].trimmingCharacters(in: .whitespaces)
+        guard value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") else { return nil }
+        return String(value.dropFirst().dropLast())
+    }
+
+    static func quote(_ value: String) -> String {
+        "\"" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+    }
+
+    private static func run(_ arguments: [String], input: String? = nil) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         process.arguments = arguments
         let stdout = Pipe()
         process.standardOutput = stdout
         process.standardError = Pipe()
+        let stdin = Pipe()
+        if input != nil { process.standardInput = stdin }
         do {
             try process.run()
         } catch {
             return nil
+        }
+        if let input {
+            stdin.fileHandleForWriting.write(Data(input.utf8))
+            try? stdin.fileHandleForWriting.close()
         }
         let data = stdout.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
