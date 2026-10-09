@@ -1,0 +1,139 @@
+import AppKit
+import SwiftUI
+
+final class GlossNSTextView: NSTextView {
+    var onImage: ((Data) -> Void)?
+    var onPasteText: (() -> Void)?
+
+    override func paste(_ sender: Any?) {
+        let pasteboard = NSPasteboard.general
+        let hasText = pasteboard.canReadObject(forClasses: [NSString.self], options: nil)
+        if !hasText, let data = ImageEncoding.jpeg(from: pasteboard) {
+            onImage?(data)
+            return
+        }
+        let wasEmpty = string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        pasteAsPlainText(sender)
+        if wasEmpty { onPasteText?() }
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if isEditable, NSImage.canInit(with: sender.draggingPasteboard) { return .copy }
+        return super.draggingEntered(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if isEditable, let data = ImageEncoding.jpeg(from: sender.draggingPasteboard) {
+            onImage?(data)
+            return true
+        }
+        return super.performDragOperation(sender)
+    }
+}
+
+enum ImageEncoding {
+    static let maxPixels: CGFloat = 2000
+
+    static func jpeg(from pasteboard: NSPasteboard) -> Data? {
+        guard NSImage.canInit(with: pasteboard), let image = NSImage(pasteboard: pasteboard) else { return nil }
+        return jpeg(from: image)
+    }
+
+    static func jpeg(from image: NSImage) -> Data? {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let width = CGFloat(cgImage.width)
+        let height = CGFloat(cgImage.height)
+        let scale = min(1, maxPixels / max(width, height))
+        let size = NSSize(width: (width * scale).rounded(), height: (height * scale).rounded())
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor.white.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        NSImage(cgImage: cgImage, size: size).draw(in: NSRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.85])
+    }
+}
+
+struct GlossTextView: NSViewRepresentable {
+    @Binding var text: String
+    var isEditable = true
+    var onSelect: (String) -> Void = { _ in }
+    var onImage: ((Data) -> Void)?
+    var onPasteText: (() -> Void)?
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+
+        let textView = GlossNSTextView(frame: .zero)
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.allowsUndo = true
+        textView.drawsBackground = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.textContainerInset = NSSize(width: 16, height: 14)
+        textView.typingAttributes = Self.attributes
+        textView.delegate = context.coordinator
+        scrollView.documentView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+        guard let textView = scrollView.documentView as? GlossNSTextView else { return }
+        textView.isEditable = isEditable
+        textView.isSelectable = true
+        textView.onImage = onImage
+        textView.onPasteText = onPasteText
+        if textView.string != text {
+            textView.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: Self.attributes))
+        }
+    }
+
+    static let attributes: [NSAttributedString.Key: Any] = {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 7
+        return [
+            .font: NSFont.systemFont(ofSize: 15),
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: paragraph,
+        ]
+    }()
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: GlossTextView
+
+        init(_ parent: GlossTextView) {
+            self.parent = parent
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            parent.text = textView.string
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            let range = textView.selectedRange()
+            let selected = range.length > 0 ? (textView.string as NSString).substring(with: range) : ""
+            parent.onSelect(selected)
+        }
+    }
+}
