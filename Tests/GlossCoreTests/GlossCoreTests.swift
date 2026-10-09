@@ -115,3 +115,21 @@ import Testing
     #expect(Keychain.account(in: "\"acct\"<blob>=<NULL>") == nil)
     #expect(Keychain.quote(#"a"b\c"#) == #""a\"b\\c""#)
 }
+
+@Test func keysWithControlCharactersAreRejected() {
+    #expect(Keychain.isAcceptableKey("  sk-abc123\n"))
+    #expect(!Keychain.isAcceptableKey("sk-abc\ndelete-generic-password -s trapop-jai"))
+    #expect(!Keychain.isAcceptableKey("sk-abc\rdef"))
+    #expect(!Keychain.isAcceptableKey("   "))
+    #expect(!Keychain.setAPIKey("a\nb", service: "gloss-test-never-written"))
+}
+
+@Test func cardContentIsOnlyRequestedForTheSavingEngineUntilItFails() {
+    var word = WordEntry(term: "run", note: "", context: "")
+    #expect(!word.needsCardContent(for: .jai))
+    word.engine = .jai
+    #expect(word.needsCardContent(for: .jai))
+    #expect(!word.needsCardContent(for: .openai))
+    word.cardError = "HTTP 401"
+    #expect(!word.needsCardContent(for: .jai))
+}

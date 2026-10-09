@@ -6,7 +6,7 @@
 ## 使い方
 
 1. 文章か画像を ⌘V で貼り付ける(画像はドラッグ&ドロップでも可)。貼った瞬間に翻訳が始まる
-2. 原文か訳文の単語をダブルクリックすると、右のパネルで意味を説明してくれる。熟語はドラッグで選んで ⌘L
+2. 原文か訳文の単語をダブルクリックするか、フレーズをドラッグで選ぶと、右のパネルで意味を説明してくれる(60字以内・1行の範囲。長い選択やキーボードで選んだときは ⌘L)
 3. 「ニュアンス」「例文」「使う場面」のボタンか、自由入力でさらに聞ける
 4. 質問した語句は、最初の答えが出た時点で単語帳に自動で入る(語句・説明・出てきた文)。要らなければパネルのボタンで外せる
 
@@ -19,12 +19,8 @@
 ⌘, で翻訳エンジン(JAPAN AI Gateway / OpenAI / Gemini)・モデル・JAPAN AI のユーザーID を変えられる。
 初回起動時は TraPoP の設定を引き継ぐ。
 
-API キーは TraPoP と同じ Keychain の項目(`trapop-jai` / `trapop-openai` / `trapop-gemini`)から読む。
-新しく登録するときは次のコマンドを使う。
-
-```sh
-security add-generic-password -s trapop-jai -a gloss -w
-```
+API キーは設定画面(⌘,)の「API キー」欄に貼り付けて「保存」で登録する。
+保存先は TraPoP と同じ Keychain の項目(`trapop-jai` / `trapop-openai` / `trapop-gemini`)で、TraPoP 側のキーも同時に変わる。
 
 データは `~/Library/Application Support/Gloss/` に JSON で保存する。
 

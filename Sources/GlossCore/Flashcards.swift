@@ -55,6 +55,10 @@ extension WordEntry {
     // 訳と例文がそろったら、もう AI に作らせない
     public var isCardComplete: Bool { hasCardPair && !(example ?? "").isEmpty && !(exampleTranslation ?? "").isEmpty }
 
+    public func needsCardContent(for engine: Engine) -> Bool {
+        !isCardComplete && cardError == nil && self.engine == engine
+    }
+
     public func text(for face: CardFace) -> String {
         let value = face == .english ? english : japanese
         return (value ?? "").isEmpty ? term : value!

@@ -4,12 +4,15 @@ import SwiftUI
 final class GlossNSTextView: NSTextView {
     var onImage: ((Data) -> Void)?
     var onPasteText: (() -> Void)?
-    var onDoubleClickWord: (() -> Void)?
+    var onMouseSelect: ((String) -> Void)?
 
-    // super の mouseDown はマウスを離すまで戻らないので、戻った時点で選択は確定している
+    // super の mouseDown はマウスを離すまで戻らないので、戻った時点で選択は確定している。
+    // ダブルクリックの単語も、ドラッグで選んだフレーズも、ここで質問に回す
     override func mouseDown(with event: NSEvent) {
         super.mouseDown(with: event)
-        if event.clickCount == 2, selectedRange().length > 0 { onDoubleClickWord?() }
+        let range = selectedRange()
+        guard range.length > 0 else { return }
+        onMouseSelect?((string as NSString).substring(with: range))
     }
 
     // プレーンテキストの NSTextView は画像の型を読めないので、画像だけのクリップボード
@@ -82,7 +85,7 @@ struct GlossTextView: NSViewRepresentable {
     var onSelect: (String) -> Void = { _ in }
     var onImage: ((Data) -> Void)?
     var onPasteText: (() -> Void)?
-    var onDoubleClickWord: (() -> Void)?
+    var onMouseSelect: ((String) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -119,7 +122,7 @@ struct GlossTextView: NSViewRepresentable {
         textView.isSelectable = true
         textView.onImage = onImage
         textView.onPasteText = onPasteText
-        textView.onDoubleClickWord = onDoubleClickWord
+        textView.onMouseSelect = onMouseSelect
         if textView.string != text {
             textView.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: Self.attributes))
         }

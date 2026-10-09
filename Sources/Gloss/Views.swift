@@ -13,6 +13,8 @@ struct ContentView: View {
             Group {
                 if model.showsWords {
                     WordsView()
+                } else if model.showsHistory {
+                    HistoryView()
                 } else {
                     TranslateView()
                 }
@@ -58,26 +60,58 @@ struct SidebarView: View {
             Label("単語帳", systemImage: "book.closed")
                 .badge(model.words.count)
                 .tag(SidebarItem.words)
+            Label("履歴", systemImage: "clock")
+                .tag(SidebarItem.history)
+        }
+        .listStyle(.sidebar)
+    }
+}
 
-            if !model.history.isEmpty {
-                Section("履歴") {
-                    ForEach(model.history) { item in
-                        VStack(alignment: .leading, spacing: 2) {
+// たまにしか見ないので、サイドバーには置かず、ここで一覧にする
+struct HistoryView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if model.history.isEmpty {
+            ContentUnavailableView(
+                "履歴はまだありません",
+                systemImage: "clock",
+                description: Text("翻訳すると、ここに新しい順で並びます")
+            )
+        } else {
+            List(model.history) { item in
+                Button {
+                    model.openHistory(item)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text(item.title)
                                 .lineLimit(1)
-                            Text(item.date, format: .relative(presentation: .named))
-                                .font(.caption)
+                            Text(item.translation)
+                                .font(.callout)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
-                        .tag(SidebarItem.history(item.id))
-                        .contextMenu {
-                            Button("削除", role: .destructive) { model.deleteHistory(item) }
+                        Spacer(minLength: 12)
+                        if item.imageFile != nil {
+                            Image(systemName: "photo")
+                                .foregroundStyle(.secondary)
+                                .help("画像から翻訳")
                         }
+                        Text(item.date, format: .relative(presentation: .named))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("翻訳画面で開く")
+                .contextMenu {
+                    Button("削除", role: .destructive) { model.deleteHistory(item) }
                 }
             }
         }
-        .listStyle(.sidebar)
     }
 }
 
@@ -123,7 +157,7 @@ struct TranslateView: View {
                     onSelect: model.select,
                     onImage: model.setImage,
                     onPasteText: model.didPasteText,
-                    onDoubleClickWord: model.askAboutSelection
+                    onMouseSelect: model.askAboutMouseSelection
                 )
                 if model.sourceText.isEmpty {
                     Text(model.sourceImage == nil ? "文章か画像を ⌘V で貼り付け" : "画像の文字がここに書き起こされます")
@@ -172,7 +206,7 @@ struct TranslateView: View {
                 text: .constant(model.translation),
                 isEditable: false,
                 onSelect: model.select,
-                onDoubleClickWord: model.askAboutSelection
+                onMouseSelect: model.askAboutMouseSelection
             )
 
             if let error = model.translationError {
@@ -184,7 +218,7 @@ struct TranslateView: View {
                 }
                 .padding(24)
             } else if model.translation.isEmpty && !model.isTranslating {
-                Text("単語をダブルクリックすると、意味を質問できます")
+                Text("単語やフレーズを選ぶと、意味を質問できます")
                     .font(.callout)
                     .foregroundStyle(.tertiary)
                     .allowsHitTesting(false)
@@ -192,7 +226,8 @@ struct TranslateView: View {
         }
         .frame(maxHeight: .infinity)
         .overlay(alignment: .bottom) {
-            if !model.selection.isEmpty {
+            // マウスで選んだときはもう質問しているので、キーボードで選んだときだけボタンを出す
+            if !model.selection.isEmpty, model.selection != model.focus {
                 Button(action: model.askAboutSelection) {
                     Label("「\(model.selection.prefix(24))」について質問", systemImage: "questionmark.bubble")
                 }
@@ -204,7 +239,7 @@ struct TranslateView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.snappy(duration: 0.2), value: model.selection.isEmpty)
+        .animation(.snappy(duration: 0.2), value: model.selection.isEmpty || model.selection == model.focus)
     }
 }
 
@@ -214,11 +249,19 @@ struct AskPanel: View {
     var body: some View {
         @Bindable var model = model
         if model.focus.isEmpty {
-            ContentUnavailableView(
-                "語句を選んで質問",
-                systemImage: "questionmark.bubble",
-                description: Text("原文か訳文の単語をダブルクリックすると、ここで意味や使い方を聞けます。熟語はドラッグで選んで ⌘L")
-            )
+            if model.showsWords {
+                ContentUnavailableView(
+                    "カードをめくると説明が出ます",
+                    systemImage: "rectangle.on.rectangle",
+                    description: Text("めくったカードの説明がここに出て、続けて質問できます")
+                )
+            } else {
+                ContentUnavailableView(
+                    "語句を選んで質問",
+                    systemImage: "questionmark.bubble",
+                    description: Text("原文か訳文の単語をダブルクリックするか、フレーズをドラッグで選ぶと、ここで意味や使い方を聞けます")
+                )
+            }
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 header
@@ -321,7 +364,7 @@ struct WordsView: View {
                 ContentUnavailableView(
                     "単語帳はまだ空です",
                     systemImage: "book.closed",
-                    description: Text("単語をダブルクリックして質問すると、ここに自動で並びます")
+                    description: Text("単語やフレーズを選んで質問すると、ここに自動で並びます")
                 )
             } else {
                 ScrollView {
@@ -390,8 +433,16 @@ struct WordCard: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityHint(isOpen ? "表に戻す" : "裏返して答えを見る")
         .contextMenu {
+            Button("訳と例文を作り直す") { model.regenerateCard(word.id) }
             Button("単語帳から削除", role: .destructive) { model.deleteWord(word.id) }
         }
+    }
+
+    private var cardStatus: String? {
+        if word.isCardComplete { return nil }
+        if let error = word.cardError { return "訳と例文を作れませんでした(\(error))。右クリックで作り直せます" }
+        if word.engine != model.settings.engine { return "右クリックの「訳と例文を作り直す」で、今のエンジンで作れます" }
+        return "訳と例文を作成中…"
     }
 
     private var front: some View {
@@ -401,10 +452,11 @@ struct WordCard: View {
                     Text(word.hasCardPair ? word.text(for: face) : word.term)
                         .font(.title2.weight(.semibold))
                         .lineLimit(2)
-                    if !word.isCardComplete {
-                        Text("訳と例文を作成中…")
+                    if let status = cardStatus {
+                        Text(status)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
                 }
                 Spacer(minLength: 16)
@@ -547,7 +599,7 @@ struct APIKeyField: View {
         }
         .task { isSaved = Keychain.hasKey(service: service) }
         if failed {
-            Text("Keychain に保存できませんでした")
+            Text(failureMessage)
                 .font(.caption)
                 .foregroundStyle(.red)
         } else {
@@ -555,6 +607,12 @@ struct APIKeyField: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var failureMessage: String {
+        Keychain.isAcceptableKey(draft) || draft.isEmpty
+            ? "Keychain に保存できませんでした"
+            : "改行などの制御文字を含むキーは保存できません"
     }
 
     private func save() {
