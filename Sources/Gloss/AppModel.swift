@@ -64,6 +64,10 @@ final class AppModel {
         !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sourceImage != nil
     }
 
+    var focusWord: WordEntry? {
+        words.first { $0.term.caseInsensitiveCompare(focus) == .orderedSame }
+    }
+
     var isFocusSaved: Bool {
         words.contains { $0.term.caseInsensitiveCompare(focus) == .orderedSame }
     }

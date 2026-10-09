@@ -309,6 +309,9 @@ struct AskPanel: View {
                 .help(model.isFocusSaved ? "クリックで単語帳から外す" : "クリックで単語帳に保存")
                 .disabled(model.thread.allSatisfy { $0.role != .assistant || $0.text.isEmpty })
             }
+            if model.showsWords, let word = model.focusWord {
+                CardDetails(word: word)
+            }
             HStack(spacing: 6) {
                 ForEach(Prompts.quickQuestions) { quick in
                     Button(quick.label) { model.send(quick.question(about: model.focus)) }
@@ -369,7 +372,7 @@ struct WordsView: View {
             } else {
                 ScrollView {
                     // 横長のカードを1列に並べる。幅は読みやすい長さで止める
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: 8) {
                         ForEach(model.orderedWords) { word in
                             WordCard(word: word, face: model.settings.cardFace, isOpen: model.openCardID == word.id)
                         }
@@ -417,101 +420,189 @@ struct WordCard: View {
     private var backFace: CardFace { face == .english ? .japanese : .english }
 
     var body: some View {
-        // 中身の多い裏でカードの大きさを決め、表はその上に重ねて同じ大きさにする
-        back
-            .opacity(isOpen ? 1 : 0)
-            .rotation3DEffect(.degrees(reduceMotion ? 0 : (isOpen ? 0 : -180)), axis: (0, 1, 0))
-            .overlay {
-                front
-                    .opacity(isOpen ? 0 : 1)
-                    .rotation3DEffect(.degrees(reduceMotion ? 0 : (isOpen ? 180 : 0)), axis: (0, 1, 0))
+        // カードは動かさず、文字だけを入れ替える。表の文字は一文字ずつぼやけながら上へ抜け、
+        // 裏の文字は下から浮かび上がる。横長のカードを回すと動く距離が長くなるため
+        CardSurface(isOpen: isOpen) {
+            ZStack(alignment: .leading) {
+                cardText(word.hasCardPair ? word.text(for: face) : word.term, shown: !isOpen, rise: -1)
+                cardText(word.hasCardPair ? word.text(for: backFace) : word.term, shown: isOpen, rise: 1)
             }
-        .contentShape(RoundedRectangle(cornerRadius: 12))
+            Spacer(minLength: 12)
+            ZStack(alignment: .trailing) {
+                frontInfo
+                    .opacity(isOpen ? 0 : 1)
+                    .blur(radius: isOpen && !reduceMotion ? 4 : 0)
+                    .allowsHitTesting(!isOpen)
+                masteryPicker
+                    .opacity(isOpen ? 1 : 0)
+                    .blur(radius: !isOpen && !reduceMotion ? 4 : 0)
+                    .allowsHitTesting(isOpen)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 10))
         .onTapGesture { model.flipCard(word.id) }
-        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(duration: 0.4), value: isOpen)
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .timingCurve(0.22, 1, 0.36, 1, duration: 0.7), value: isOpen)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isButton)
-        .accessibilityHint(isOpen ? "表に戻す" : "裏返して答えを見る")
+        .accessibilityHint(isOpen ? "表に戻す" : "裏返して訳を見る")
         .contextMenu {
             Button("訳と例文を作り直す") { model.regenerateCard(word.id) }
             Button("単語帳から削除", role: .destructive) { model.deleteWord(word.id) }
         }
     }
 
-    private var cardStatus: String? {
-        if word.isCardComplete { return nil }
-        if let error = word.cardError { return "訳と例文を作れませんでした(\(error))。右クリックで作り直せます" }
-        if word.engine != model.settings.engine { return "右クリックの「訳と例文を作り直す」で、今のエンジンで作れます" }
-        return "訳と例文を作成中…"
-    }
-
-    private var front: some View {
-        CardSurface {
-            HStack(alignment: .center, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(word.hasCardPair ? word.text(for: face) : word.term)
-                        .font(.title2.weight(.semibold))
-                        .lineLimit(2)
-                    if let status = cardStatus {
-                        Text(status)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-                Spacer(minLength: 16)
-                stats
-            }
+    @ViewBuilder private func cardText(_ text: String, shown: Bool, rise: Double) -> some View {
+        let label = Text(text)
+            .font(.title3.weight(.semibold))
+        if #available(macOS 15, *) {
+            label
+                .textRenderer(GlyphRise(progress: shown ? 1 : 0, direction: rise, moves: !reduceMotion))
+                .lineLimit(1)
+                .accessibilityHidden(!shown)
+        } else {
+            label
+                .opacity(shown ? 1 : 0)
+                .lineLimit(1)
+                .accessibilityHidden(!shown)
         }
     }
 
-    private var back: some View {
-        CardSurface {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(word.hasCardPair ? word.text(for: backFace) : word.term)
-                        .font(.title3.weight(.semibold))
-                        .lineLimit(2)
-                    Spacer(minLength: 16)
-                    Picker("覚えた度合い", selection: Binding(
-                        get: { word.masteryLevel },
-                        set: { model.setMastery($0, for: word.id) }
-                    )) {
-                        ForEach(Mastery.allCases) { level in
-                            Text(level.label).tag(level)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .fixedSize()
-                }
-                if !word.context.isEmpty {
-                    CardLine(label: "用例", text: word.context, translation: nil)
-                }
-                if let example = word.example, !example.isEmpty {
-                    CardLine(label: "例文", text: example, translation: word.exampleTranslation)
-                }
+    // 表の右側は、覚えた度合いの印・めくった回数・最後にめくった日だけ。言葉の説明はマウスを乗せたときに出す
+    private var frontInfo: some View {
+        HStack(spacing: 10) {
+            status
+            Image(systemName: word.masteryLevel.symbol)
+                .foregroundStyle(word.masteryLevel.tint)
+            Text(reviewSummary)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .font(.callout)
+        .help(reviewHelp)
+    }
+
+    private var masteryPicker: some View {
+        Picker("覚えた度合い", selection: Binding(
+            get: { word.masteryLevel },
+            set: { model.setMastery($0, for: word.id) }
+        )) {
+            ForEach(Mastery.allCases) { level in
+                Label(level.label, systemImage: level.symbol)
+                    .labelStyle(.iconOnly)
+                    .tag(level)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .help("覚えた度合い: ✕ 覚えてない / ? あやしい / ✓ 覚えた")
+    }
+
+    // 1行に収めるため、作成中と失敗は文ではなく印で出し、理由はマウスを乗せたときに出す
+    @ViewBuilder private var status: some View {
+        if word.isCardComplete {
+            EmptyView()
+        } else if let error = word.cardError {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(.secondary)
+                .help("訳と例文を作れませんでした(\(error))。右クリックで作り直せます")
+        } else if word.engine != model.settings.engine {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.secondary)
+                .help("右クリックの「訳と例文を作り直す」で、今のエンジンで作れます")
+        } else {
+            ProgressView()
+                .controlSize(.mini)
+                .help("訳と例文を作成中")
         }
     }
 
-    private var stats: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            Text(word.masteryLevel.label)
-                .font(.caption.weight(.medium))
-            Group {
-                if let date = word.lastReviewed {
-                    Text("最後にめくった日 \(date.formatted(.dateTime.year().month().day()))")
-                } else {
-                    Text("まだめくっていない")
-                }
-                Text("めくった回数 \(word.flipCount)回")
+    private var reviewSummary: String {
+        guard let date = word.lastReviewed else { return "0回" }
+        return "\(word.flipCount)回 · \(Self.daysAgo(date))"
+    }
+
+    private var reviewHelp: String {
+        let last = word.lastReviewed.map { $0.formatted(.dateTime.year().month().day()) } ?? "まだめくっていない"
+        return "\(word.masteryLevel.label)・めくった回数 \(word.flipCount)回・最後にめくった日 \(last)"
+    }
+
+    static func daysAgo(_ date: Date) -> String {
+        let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: date), to: Calendar.current.startOfDay(for: .now)).day ?? 0
+        switch days {
+        case ..<1: return "今日"
+        case 1: return "昨日"
+        default: return "\(days)日前"
+        }
+    }
+}
+
+extension Mastery {
+    var symbol: String {
+        switch self {
+        case .notYet: "xmark"
+        case .unsure: "questionmark"
+        case .known: "checkmark"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .notYet: .secondary
+        case .unsure: .orange
+        case .known: .green
+        }
+    }
+}
+
+// 文字を一文字ずつ時間差で出し入れする。消えるときはぼやけながら direction の向きへ抜け、
+// 出るときは反対側から浮かび上がる
+@available(macOS 15, *)
+struct GlyphRise: TextRenderer, Animatable {
+    var progress: Double
+    let direction: Double
+    let moves: Bool
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        let glyphs = layout.flatMap { line in line.flatMap { run in run } }
+        // 文字数が多くても全体の長さが変わらないよう、時間差は全体の 40% に収める
+        let stagger = 0.4
+        for (index, glyph) in glyphs.enumerated() {
+            let start = glyphs.count > 1 ? stagger * Double(index) / Double(glyphs.count - 1) : 0
+            let t = min(max((progress - start) / (1 - stagger), 0), 1)
+            var copy = context
+            copy.opacity = t
+            if moves {
+                // 出るときは下から、消えるときは上へ。progress が減る向きでは direction を逆にしない
+                copy.translateBy(x: 0, y: (1 - t) * 9 * direction)
+                copy.addFilter(.blur(radius: (1 - t) * 5))
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .monospacedDigit()
+            copy.draw(glyph)
+        }
+    }
+}
+
+// カードの裏に収まらない訳・用例・例文は、めくったときに右のパネルに出す
+struct CardDetails: View {
+    let word: WordEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if word.hasCardPair {
+                CardLine(label: "英", text: word.text(for: .english), translation: nil)
+                CardLine(label: "日", text: word.text(for: .japanese), translation: nil)
+            }
+            if !word.context.isEmpty {
+                CardLine(label: "用例", text: word.context, translation: nil)
+            }
+            if let example = word.example, !example.isEmpty {
+                CardLine(label: "例文", text: example, translation: word.exampleTranslation)
+            }
         }
     }
 }
@@ -542,15 +633,21 @@ struct CardLine: View {
     }
 }
 
+// 裏を開いているカードは、縁と下地にほんのりアクセント色を差して、どれを開いているか分かるようにする
 struct CardSurface<Content: View>: View {
+    var isOpen = false
     @ViewBuilder var content: Content
 
     var body: some View {
-        content
-            .padding(16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+        HStack(spacing: 10) { content }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .overlay(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(isOpen ? 0.08 : 0)))
+            }
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(isOpen ? AnyShapeStyle(Color.accentColor.opacity(0.5)) : AnyShapeStyle(.separator)))
     }
 }
 
