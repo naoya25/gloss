@@ -133,3 +133,39 @@ import Testing
     word.cardError = "HTTP 401"
     #expect(!word.needsCardContent(for: .jai))
 }
+
+@Test func studyChunksAreSplitFromTheAnswer() {
+    let raw = """
+    stop by で「立ち寄る」という句動詞です。to は welcome to に続く不定詞です。
+    CHUNK: stop by | 立ち寄る
+    CHUNK: grab a drink | 飲み物を手に取る
+    CHUNK: Stop By | 重複
+    """
+    let result = Prompts.splitChunks(raw)
+    #expect(result.text == "stop by で「立ち寄る」という句動詞です。to は welcome to に続く不定詞です。")
+    #expect(result.chunks == [
+        StudyChunk(expression: "stop by", meaning: "立ち寄る"),
+        StudyChunk(expression: "grab a drink", meaning: "飲み物を手に取る"),
+    ])
+}
+
+@Test func noChunkAndPartialChunkLinesAreHidden() {
+    #expect(Prompts.splitChunks("説明です。\nCHUNK: なし").chunks.isEmpty)
+    #expect(Prompts.splitChunks("説明です。\nCHUNK: なし").text == "説明です。")
+    #expect(Prompts.splitChunks("説明です。\nCHU").text == "説明です。")
+    #expect(Prompts.splitChunks("説明です。\nCHUNK: sto").text == "説明です。")
+}
+
+@Test func historyMatchesOnlyTheSameTextAndTarget() throws {
+    let item = HistoryItem(source: "  Stop by anytime.\n", translation: "いつでも寄って", target: .japanese)
+    #expect(item.matches(source: "Stop by anytime.", target: .japanese))
+    #expect(!item.matches(source: "Stop by anytime!", target: .japanese))
+    #expect(!item.matches(source: "Stop by anytime.", target: .english))
+    #expect(!HistoryItem(source: "a", translation: "b", imageFile: "x.jpg").matches(source: "a", target: .auto))
+
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let old = #"[{"id":"7C9E6679-7425-40DE-944B-E07FC1F90AE7","date":"2026-10-09T09:00:00Z","source":"hi","translation":"やあ"}]"#
+    let decoded = try decoder.decode([HistoryItem].self, from: Data(old.utf8))
+    #expect(decoded[0].matches(source: "hi", target: .auto))
+}
