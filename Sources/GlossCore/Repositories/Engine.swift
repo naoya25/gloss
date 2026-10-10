@@ -50,15 +50,15 @@ public enum GlossError: LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .missingAPIKey(let engine):
-            "\(engine.displayName) の API キーが Keychain にありません(\(engine.keychainService))"
+            "No \(engine.displayName) API key in Keychain (\(engine.keychainService))"
         case .missingUserID:
-            "JAPAN AI Gateway のユーザーID が未設定です。設定(⌘,)で会社のメールアドレスを入れてください"
+            "JAPAN AI Gateway user ID is not set. Enter your work email in Settings (⌘,)."
         case .http(let status, let engine):
             switch status {
-            case 401, 403: "\(engine.displayName) の API キーが無効です"
-            case 429: "\(engine.displayName) がレート制限中です。少し待って再試行してください"
-            case 500...599: "\(engine.displayName) 側で障害が起きています(HTTP \(status))"
-            default: "\(engine.displayName) API エラー(HTTP \(status))"
+            case 401, 403: "The \(engine.displayName) API key is invalid"
+            case 429: "\(engine.displayName) is rate limiting requests. Wait a moment and try again."
+            case 500...599: "\(engine.displayName) is having problems (HTTP \(status))"
+            default: "\(engine.displayName) API error (HTTP \(status))"
             }
         }
     }

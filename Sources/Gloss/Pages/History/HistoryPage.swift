@@ -8,9 +8,9 @@ struct HistoryPage: View {
     var body: some View {
         if history.state.items.isEmpty {
             ContentUnavailableView(
-                "履歴はまだありません",
+                "No history yet",
                 systemImage: "clock",
-                description: Text("翻訳すると、ここに新しい順で並びます")
+                description: Text("Your translations show up here, newest first.")
             )
         } else {
             List(history.state.items) { item in
@@ -44,7 +44,7 @@ private struct HistoryRow: View {
                 if item.imageFile != nil {
                     Image(systemName: "photo")
                         .foregroundStyle(.secondary)
-                        .help("画像から翻訳")
+                        .help("Translated from an image")
                 }
                 Text(item.date, format: .relative(presentation: .named))
                     .font(.caption)
@@ -54,9 +54,9 @@ private struct HistoryRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("翻訳画面で開く")
+        .help("Open in Translate")
         .contextMenu {
-            Button("削除", role: .destructive) { history.delete(item) }
+            Button("Delete", role: .destructive) { history.delete(item) }
         }
     }
 }

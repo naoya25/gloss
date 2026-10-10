@@ -39,6 +39,16 @@ final class SettingsStore {
         state.wordSort = order
     }
 
+    func setSyncURL(_ url: String) {
+        state.syncURL = url
+    }
+
+    // 同期先の URL と合言葉がそろっていないときは同期しない
+    func makeSyncClient() -> SyncClient? {
+        guard !state.syncURL.isEmpty, let token = Keychain.apiKey(service: SyncClient.keychainService) else { return nil }
+        return try? SyncClient(baseURL: state.syncURL, token: token)
+    }
+
     func makeClient() -> ChatClient {
         ChatClient(engine: state.engine, model: state.model, userID: state.jaiUserID)
     }

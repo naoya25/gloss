@@ -10,7 +10,9 @@ struct RootPage: View {
             Sidebar()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 320)
         } detail: {
+            // 同じ画面の型どうし(向きの違う単語テストなど)を行き来しても、開き直したことになるようにする
             router.route.page
+                .id(router.route)
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         }
         .inspector(isPresented: Binding(get: { ask.state.isPanelOpen }, set: ask.setPanelOpen)) {
@@ -26,17 +28,17 @@ struct RootPage: View {
                     translate.reset()
                     router.go(.translate)
                 } label: {
-                    Label("新規翻訳", systemImage: "square.and.pencil")
+                    Label("New Translation", systemImage: "square.and.pencil")
                 }
-                .help("新規翻訳(⌘N)")
+                .help("New translation (⌘N)")
             }
             ToolbarItem {
                 Button {
                     ask.setPanelOpen(!ask.state.isPanelOpen)
                 } label: {
-                    Label("質問パネル", systemImage: "sidebar.trailing")
+                    Label("Question Panel", systemImage: "sidebar.trailing")
                 }
-                .help("質問パネルの表示を切り替え")
+                .help("Show or hide the question panel")
             }
         }
     }
@@ -45,15 +47,31 @@ struct RootPage: View {
 private struct Sidebar: View {
     @Environment(RouterStore.self) private var router
     @Environment(WordsStore.self) private var words
+    @State private var showsChallenges = true
 
     var body: some View {
         List(selection: Binding(get: { router.route }, set: { if let route = $0 { router.go(route) } })) {
-            ForEach(AppRoute.allCases, id: \.self) { route in
-                Label(route.title, systemImage: route.symbol)
-                    .badge(route == .words ? words.state.words.count : 0)
-                    .tag(route)
+            SidebarRow(route: .translate)
+            SidebarRow(route: .words, badge: words.state.words.count)
+            DisclosureGroup(isExpanded: $showsChallenges) {
+                ForEach(AppRoute.challenges, id: \.self) { SidebarRow(route: $0) }
+            } label: {
+                Label("Challenge", systemImage: "checkmark.seal")
             }
+            SidebarRow(route: .report)
+            SidebarRow(route: .history)
         }
         .listStyle(.sidebar)
+    }
+}
+
+private struct SidebarRow: View {
+    let route: AppRoute
+    var badge = 0
+
+    var body: some View {
+        Label(route.title, systemImage: route.symbol)
+            .badge(badge)
+            .tag(route)
     }
 }

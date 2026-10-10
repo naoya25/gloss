@@ -31,7 +31,7 @@ private struct SourceEditor: View {
             )
             .overlay(alignment: .topLeading) {
                 if translate.state.sourceText.isEmpty {
-                    Text(translate.state.sourceImage == nil ? "文章か画像を ⌘V で貼り付け" : "画像の文字がここに書き起こされます")
+                    Text(translate.state.sourceImage == nil ? "Paste text or an image with ⌘V" : "Text in the image will appear here")
                         .font(.system(size: 15))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 21)
@@ -61,7 +61,7 @@ private struct AttachedImage: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("画像を外す")
+            .help("Remove image")
         }
         .padding([.horizontal, .top], 16)
     }
@@ -73,7 +73,7 @@ private struct TranslateControls: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Picker("翻訳先", selection: Binding(get: { settings.state.target }, set: settings.setTarget)) {
+            Picker("Target", selection: Binding(get: { settings.state.target }, set: settings.setTarget)) {
                 ForEach(TranslationTarget.allCases) { target in
                     Text(target.label).tag(target)
                 }
@@ -91,11 +91,11 @@ private struct TranslateControls: View {
                 ProgressView()
                     .controlSize(.small)
             }
-            Button("翻訳") { translate.translate() }
+            Button("Translate") { translate.translate() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(!translate.state.canTranslate)
-                .help("翻訳(⌘↩)")
+                .help("Translate (⌘↩)")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -110,12 +110,12 @@ private struct CacheBadge: View {
         Button {
             translate.translate(force: true)
         } label: {
-            Label("履歴から表示", systemImage: "arrow.clockwise")
+            Label("From History", systemImage: "arrow.clockwise")
         }
         .buttonStyle(.borderless)
         .controlSize(.small)
         .foregroundStyle(.secondary)
-        .help("前に訳した同じ文の訳を出しています。押すと訳し直します")
+        .help("Showing your earlier translation of the same text. Click to translate it again.")
     }
 }
 
@@ -156,11 +156,11 @@ private struct ResultMessage: View {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Button("再試行") { translate.translate(force: true) }
+                Button("Retry") { translate.translate(force: true) }
             }
             .padding(24)
         } else if translate.state.translation.isEmpty && !translate.state.isTranslating {
-            Text("単語やフレーズを選ぶと、意味を質問できます")
+            Text("Select a word or phrase to ask about it")
                 .font(.callout)
                 .foregroundStyle(.tertiary)
                 .allowsHitTesting(false)
@@ -176,12 +176,12 @@ private struct AskSelectionButton: View {
         Button {
             ask.ask(about: translate.state.selection, source: translate.state.sourceText, translation: translate.state.translation)
         } label: {
-            Label("「\(translate.state.selection.prefix(24))」について質問", systemImage: "questionmark.bubble")
+            Label("Ask about “\(translate.state.selection.prefix(24))”", systemImage: "questionmark.bubble")
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .keyboardShortcut("l", modifiers: .command)
-        .help("選んだ語句を質問(⌘L)")
+        .help("Ask about the selection (⌘L)")
         .padding(.bottom, 16)
     }
 }

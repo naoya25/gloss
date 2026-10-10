@@ -9,9 +9,9 @@ struct WordsPage: View {
         Group {
             if words.state.words.isEmpty {
                 ContentUnavailableView(
-                    "単語帳はまだ空です",
+                    "Your Book is empty",
                     systemImage: "book.closed",
-                    description: Text("単語やフレーズを選んで質問すると、ここに自動で並びます")
+                    description: Text("Select words or phrases and ask about them. They show up here automatically.")
                 )
             } else {
                 ScrollView {
@@ -30,17 +30,17 @@ struct WordsPage: View {
         .onAppear(perform: words.didOpen)
         .toolbar {
             ToolbarItem {
-                Picker("表に出す言語", selection: Binding(get: { settings.state.cardFace }, set: settings.setCardFace)) {
+                Picker("Front Side", selection: Binding(get: { settings.state.cardFace }, set: settings.setCardFace)) {
                     ForEach(CardFace.allCases) { face in
                         Text(face.label).tag(face)
                     }
                 }
                 .pickerStyle(.segmented)
-                .help("カードの表に出す言語")
+                .help("Language on the front of the cards")
             }
             ToolbarItem {
                 Menu {
-                    Picker("並び替え", selection: Binding(get: { settings.state.wordSort }, set: words.setSort)) {
+                    Picker("Sort", selection: Binding(get: { settings.state.wordSort }, set: words.setSort)) {
                         ForEach(WordSort.allCases) { order in
                             Text(order.label).tag(order)
                         }
@@ -49,7 +49,7 @@ struct WordsPage: View {
                 } label: {
                     Label(settings.state.wordSort.label, systemImage: "arrow.up.arrow.down")
                 }
-                .help("並び替え")
+                .help("Sort")
             }
         }
     }

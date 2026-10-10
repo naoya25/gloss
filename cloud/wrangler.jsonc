@@ -1,0 +1,13 @@
+{
+  "name": "gloss-sync",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gloss",
+      "database_id": "e7ef2b1b-d93b-4d8c-a22e-5b1a06b96519"
+    }
+  ]
+}

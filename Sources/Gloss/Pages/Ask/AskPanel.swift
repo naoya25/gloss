@@ -26,15 +26,15 @@ private struct AskEmptyState: View {
     var body: some View {
         if isWords {
             ContentUnavailableView(
-                "カードをめくると説明が出ます",
+                "Flip a card to see its details",
                 systemImage: "rectangle.on.rectangle",
-                description: Text("めくったカードの説明がここに出て、続けて質問できます")
+                description: Text("The card's explanation shows up here, and you can keep asking questions.")
             )
         } else {
             ContentUnavailableView(
-                "語句を選んで質問",
+                "Select a word to ask about it",
                 systemImage: "questionmark.bubble",
-                description: Text("原文か訳文の単語をダブルクリックするか、フレーズをドラッグで選ぶと、ここで意味や使い方を聞けます")
+                description: Text("Double-click a word or drag across a phrase in either text to ask what it means and how to use it.")
             )
         }
     }
@@ -69,7 +69,7 @@ private struct AskHeader: View {
     }
 }
 
-// 答えから抜き出した表現を1つずつ並べる。どれも自動で単語帳に入っていて、押すと外す・入れるを切り替える
+// 答えから抜き出した表現を1つずつ並べる。押すと単語帳に入れる・外すを切り替える
 private struct StudyChunks: View {
     @Environment(AskStore.self) private var ask
 
@@ -81,7 +81,7 @@ private struct StudyChunks: View {
                 }
             }
         } else if ask.state.hasAnswer && !ask.state.isAsking {
-            Text("単語帳に入れるほどの表現はありませんでした")
+            Text("Nothing worth adding to your Book.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -110,7 +110,7 @@ private struct ChunkToggle: View {
             .lineLimit(1)
         }
         .buttonStyle(.plain)
-        .help(isSaved ? "単語帳に入っています。クリックで外す" : "クリックで単語帳に入れる")
+        .help(isSaved ? "In your Book. Click to remove it" : "Click to add it to your Book")
     }
 }
 
@@ -121,14 +121,14 @@ private struct CardDetails: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if word.hasCardPair {
-                CardLine(label: "英", text: word.text(for: .english), translation: nil)
-                CardLine(label: "日", text: word.text(for: .japanese), translation: nil)
+                CardLine(label: "EN", text: word.text(for: .english), translation: nil)
+                CardLine(label: "JA", text: word.text(for: .japanese), translation: nil)
             }
             if !word.context.isEmpty {
-                CardLine(label: "用例", text: word.context, translation: nil)
+                CardLine(label: "Seen in", text: word.context, translation: nil)
             }
             if let example = word.example, !example.isEmpty {
-                CardLine(label: "例文", text: example, translation: word.exampleTranslation)
+                CardLine(label: "Example", text: example, translation: word.exampleTranslation)
             }
         }
     }
@@ -183,7 +183,7 @@ private struct AskComposer: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField("ほかに聞きたいこと", text: Binding(get: { ask.state.draft }, set: ask.setDraft), axis: .vertical)
+            TextField("Ask something else", text: Binding(get: { ask.state.draft }, set: ask.setDraft), axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
                 .onSubmit(ask.sendDraft)

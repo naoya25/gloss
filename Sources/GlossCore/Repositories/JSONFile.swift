@@ -31,6 +31,8 @@ public enum AppPaths {
     public static let settings = support.appendingPathComponent("settings.json")
     public static let history = support.appendingPathComponent("history.json")
     public static let words = support.appendingPathComponent("words.json")
+    public static let sync = support.appendingPathComponent("sync.json")
+    public static let activity = support.appendingPathComponent("activity.json")
     public static let images = support.appendingPathComponent("images", isDirectory: true)
     public static let traPoPConfig = FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

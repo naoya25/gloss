@@ -50,6 +50,19 @@ final class GlossNSTextView: NSTextView {
     }
 }
 
+// 文字が無いときも欄全体をクリックで入力できるように、テキストビューを常に欄の高さ以上にする。
+// 中身の高さに縮むと、空のときは1行分しかなく、その下を押しても入力が始まらない
+final class GlossScrollView: NSScrollView {
+    override func tile() {
+        super.tile()
+        guard let textView = documentView as? NSTextView else { return }
+        let height = contentSize.height
+        guard textView.minSize.height != height else { return }
+        textView.minSize = NSSize(width: 0, height: height)
+        textView.sizeToFit()
+    }
+}
+
 struct GlossTextView: NSViewRepresentable {
     @Binding var text: String
     var isEditable = true
@@ -61,7 +74,7 @@ struct GlossTextView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
+        let scrollView = GlossScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
@@ -94,7 +107,8 @@ struct GlossTextView: NSViewRepresentable {
         textView.onImage = onImage
         textView.onPasteText = onPasteText
         textView.onMouseSelect = onMouseSelect
-        if textView.string != text {
+        // 日本語入力で変換中の文字は、まだ text に入っていない。ここで書き戻すと変換が消えて打てなくなる
+        if !textView.hasMarkedText(), textView.string != text {
             textView.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: Self.attributes))
         }
     }
@@ -122,7 +136,7 @@ struct GlossTextView: NSViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
+            guard let textView = notification.object as? NSTextView, !textView.hasMarkedText() else { return }
             let range = textView.selectedRange()
             let selected = range.length > 0 ? (textView.string as NSString).substring(with: range) : ""
             parent.onSelect(selected)

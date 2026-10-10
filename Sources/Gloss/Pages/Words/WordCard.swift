@@ -37,10 +37,10 @@ struct WordCard: View {
         .animation(reduceMotion ? .easeInOut(duration: 0.15) : .timingCurve(0.22, 1, 0.36, 1, duration: 0.7), value: isOpen)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isButton)
-        .accessibilityHint(isOpen ? "表に戻す" : "裏返して訳を見る")
+        .accessibilityHint(isOpen ? "Flip back" : "Flip to see the translation")
         .contextMenu {
-            Button("訳と例文を作り直す") { words.regenerate(word.id) }
-            Button("単語帳から削除", role: .destructive) { words.delete(word.id) }
+            Button("Regenerate Translation and Example") { words.regenerate(word.id) }
+            Button("Delete from Book", role: .destructive) { words.delete(word.id) }
         }
     }
 
@@ -95,22 +95,22 @@ private struct ReviewInfo: View {
     }
 
     private var summary: String {
-        guard let date = word.lastReviewed else { return "0回" }
-        return "\(word.flipCount)回 · \(Self.daysAgo(date))"
+        guard let date = word.lastReviewed else { return "0 flips" }
+        return "\(word.flipCount) \(word.flipCount == 1 ? "flip" : "flips") · \(Self.daysAgo(date))"
     }
 
     private var helpText: String {
-        let last = word.lastReviewed.map { $0.formatted(.dateTime.year().month().day()) } ?? "まだめくっていない"
-        return "\(word.masteryLevel.label)・めくった回数 \(word.flipCount)回・最後にめくった日 \(last)"
+        let last = word.lastReviewed.map { $0.formatted(.dateTime.year().month().day()) } ?? "never"
+        return "\(word.masteryLevel.label) · flipped \(word.flipCount) times · last flipped \(last)"
     }
 
     static func daysAgo(_ date: Date) -> String {
         let calendar = Calendar.current
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: .now)).day ?? 0
         switch days {
-        case ..<1: return "今日"
-        case 1: return "昨日"
-        default: return "\(days)日前"
+        case ..<1: return "today"
+        case 1: return "yesterday"
+        default: return "\(days)d ago"
         }
     }
 }
@@ -126,15 +126,15 @@ private struct CardStatus: View {
         } else if let error = word.cardError {
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(.secondary)
-                .help("訳と例文を作れませんでした(\(error))。右クリックで作り直せます")
+                .help("Couldn't create the translation and example (\(error)). Right-click to regenerate.")
         } else if word.engine != settings.state.engine {
             Image(systemName: "arrow.triangle.2.circlepath")
                 .foregroundStyle(.secondary)
-                .help("右クリックの「訳と例文を作り直す」で、今のエンジンで作れます")
+                .help("Right-click and choose Regenerate to create them with the current engine.")
         } else {
             ProgressView()
                 .controlSize(.mini)
-                .help("訳と例文を作成中")
+                .help("Creating the translation and example")
         }
     }
 }
@@ -144,7 +144,7 @@ private struct MasteryPicker: View {
     let word: WordEntry
 
     var body: some View {
-        Picker("覚えた度合い", selection: Binding(get: { word.masteryLevel }, set: { words.setMastery($0, for: word.id) })) {
+        Picker("Mastery", selection: Binding(get: { word.masteryLevel }, set: { words.setMastery($0, for: word.id) })) {
             ForEach(Mastery.allCases) { level in
                 Label(level.label, systemImage: level.symbol)
                     .labelStyle(.iconOnly)
@@ -154,7 +154,7 @@ private struct MasteryPicker: View {
         .pickerStyle(.segmented)
         .labelsHidden()
         .fixedSize()
-        .help("覚えた度合い: ✕ 覚えてない / ? あやしい / ✓ 覚えた")
+        .help("Mastery: ✕ Not Yet / ? Unsure / ✓ Known")
     }
 }
 

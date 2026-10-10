@@ -9,9 +9,9 @@ public enum Mastery: Int, Codable, CaseIterable, Identifiable, Sendable {
 
     public var label: String {
         switch self {
-        case .notYet: "覚えてない"
-        case .unsure: "あやしい"
-        case .known: "覚えた"
+        case .notYet: "Not Yet"
+        case .unsure: "Unsure"
+        case .known: "Known"
         }
     }
 }
@@ -24,8 +24,8 @@ public enum CardFace: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var label: String {
         switch self {
-        case .english: "英語"
-        case .japanese: "日本語"
+        case .english: "English"
+        case .japanese: "Japanese"
         }
     }
 }
@@ -40,10 +40,10 @@ public enum WordSort: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var label: String {
         switch self {
-        case .stale: "しばらく見ていない順"
-        case .fewestFlips: "めくった回数が少ない順"
-        case .mastery: "覚えていない順"
-        case .newest: "追加した順"
+        case .stale: "Least Recently Seen"
+        case .fewestFlips: "Fewest Flips"
+        case .mastery: "Least Known"
+        case .newest: "Newest"
         }
     }
 }

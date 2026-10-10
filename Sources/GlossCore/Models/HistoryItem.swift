@@ -26,6 +26,6 @@ public struct HistoryItem: Codable, Identifiable, Hashable, Sendable {
 
     public var title: String {
         let line = source.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-        return line.isEmpty ? (imageFile == nil ? "(空)" : "画像") : line
+        return line.isEmpty ? (imageFile == nil ? "(empty)" : "Image") : line
     }
 }

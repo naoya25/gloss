@@ -35,6 +35,8 @@ final class AskStore {
     private var handledChunks: Set<String> = []
     // 外した直後に戻せるよう、外した単語を学習記録ごと取っておく
     private var removedEntries: [String: WordEntry] = [:]
+    // 英作テストの解説では、抜き出した表現を勝手に入れず、押したものだけ単語帳に入れる
+    private var savesChunksAutomatically = true
 
     init(settings: SettingsStore, words: WordsStore) {
         self.settings = settings
@@ -57,16 +59,36 @@ final class AskStore {
         state.draft = draft
     }
 
-    func askAboutMouseSelection(_ text: String, source: String, translation: String) {
+    func askAboutMouseSelection(_ text: String, source: String, translation: String, autoSave: Bool = true) {
         let phrase = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard phrase.count <= Self.maxMouseSelectionLength, !phrase.contains(where: \.isNewline), phrase != state.focus
         else { return }
-        ask(about: phrase, source: source, translation: translation)
+        ask(about: phrase, source: source, translation: translation, autoSave: autoSave)
     }
 
-    func ask(about phrase: String, source: String, translation: String) {
+    // 英作・英文訳テストの採点を、解説として右のパネルに出す。見出しの英文について続けて質問できる
+    func openReview(focus: String, source: String, translation: String, request: String, grade: WritingGrade) {
+        task?.cancel()
+        state.isAsking = false
+        state.focus = focus
+        state.error = nil
+        self.source = source
+        self.translation = translation
+        state.thread = [
+            ChatMessage(.user, request),
+            ChatMessage(.assistant, "\(grade.score) 点\n\n\(grade.feedback)"),
+        ]
+        state.chunks = grade.chunks
+        handledChunks = []
+        removedEntries = [:]
+        savesChunksAutomatically = false
+        state.isPanelOpen = true
+    }
+
+    func ask(about phrase: String, source: String, translation: String, autoSave: Bool = true) {
         guard !phrase.isEmpty else { return }
         task?.cancel()
+        savesChunksAutomatically = autoSave
         state.focus = phrase
         state.thread = []
         state.chunks = []
@@ -95,8 +117,32 @@ final class AskStore {
         state.chunks = [StudyChunk(expression: word.term, meaning: word.japanese ?? "")]
         handledChunks = [word.term.lowercased()]
         removedEntries = [:]
+        savesChunksAutomatically = true
         state.isPanelOpen = true
         if state.thread.isEmpty { send(Prompts.quickQuestions[0].question(about: word.term)) }
+    }
+
+    // 単語テストの結果から聞くときは、採点のコメントを最初の答えとして並べる。
+    // 問題・自分の答え・正解を文脈に入れて、「なぜ違うの?」にそのまま答えられるようにする
+    func open(_ word: WordEntry, prompt: String, expected: String, answer: String, grade: WordGrade) {
+        task?.cancel()
+        state.isAsking = false
+        state.focus = word.term
+        state.error = nil
+        let written = answer.isEmpty ? "(空欄)" : answer
+        source = word.context
+        translation = "単語テスト: 問題「\(prompt)」に対して、学習者は「\(written)」と書いた。"
+            + "想定の答えは「\(expected)」で、判定は「\(grade.verdict.label)」。"
+        let summary = [grade.comment, word.note].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        state.thread = [
+            ChatMessage(.user, "「\(prompt)」を「\(written)」と書いたら \(grade.verdict.label) でした。正解は「\(expected)」です"),
+            ChatMessage(.assistant, summary.isEmpty ? "正解は「\(expected)」です。" : summary),
+        ]
+        state.chunks = [StudyChunk(expression: word.term, meaning: word.japanese ?? "")]
+        handledChunks = [word.term.lowercased()]
+        removedEntries = [:]
+        savesChunksAutomatically = true
+        state.isPanelOpen = true
     }
 
     // パネルは閉じずに中身だけ消す。閉じると詳細の幅が変わって、隣の画面がずれるため
@@ -142,7 +188,7 @@ final class AskStore {
                 let answer = Prompts.splitChunks(raw)
                 for chunk in answer.chunks {
                     if !state.chunks.contains(where: { $0.id == chunk.id }) { state.chunks.append(chunk) }
-                    guard !handledChunks.contains(chunk.id) else { continue }
+                    guard savesChunksAutomatically, !handledChunks.contains(chunk.id) else { continue }
                     handledChunks.insert(chunk.id)
                     save(chunk, note: answer.text)
                 }

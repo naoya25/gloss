@@ -23,11 +23,13 @@ final class TranslateStore {
     private(set) var state = TranslateState()
     private let settings: SettingsStore
     private let history: HistoryStore
+    private let activity: ActivityStore
     private var task: Task<Void, Never>?
 
-    init(settings: SettingsStore, history: HistoryStore) {
+    init(settings: SettingsStore, history: HistoryStore, activity: ActivityStore) {
         self.settings = settings
         self.history = history
+        self.activity = activity
     }
 
     func setSourceText(_ text: String) {
@@ -74,6 +76,7 @@ final class TranslateStore {
             state.isTranslating = false
             state.isFromCache = true
             history.touch(hit)
+            activity.record(.translated, title: hit.title)
             return
         }
         state.isFromCache = false
@@ -106,6 +109,7 @@ final class TranslateStore {
                 guard !Task.isCancelled else { return }
                 state.isTranslating = false
                 history.record(source: state.sourceText, translation: state.translation, image: image, target: target)
+                activity.record(.translated, title: history.state.items.first?.title ?? "")
             } catch is CancellationError {
             } catch {
                 guard !Task.isCancelled else { return }

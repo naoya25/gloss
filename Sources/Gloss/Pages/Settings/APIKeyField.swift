@@ -4,17 +4,19 @@ import SwiftUI
 // 入力したキーは Keychain に保存する。保存済みのキーは画面に出さない
 struct APIKeyField: View {
     let service: String
+    var label = "API Key"
+    var onSave: () -> Void = {}
     @State private var draft = ""
     @State private var isSaved = false
     @State private var failed = false
 
     var body: some View {
-        LabeledContent("API キー") {
+        LabeledContent(label) {
             HStack(spacing: 8) {
-                SecureField("API キー", text: $draft, prompt: Text(isSaved ? "保存済み(変えるときだけ入力)" : "貼り付けて保存"))
+                SecureField(label, text: $draft, prompt: Text(isSaved ? "Saved (enter only to change it)" : "Paste and save"))
                     .labelsHidden()
                     .onSubmit(save)
-                Button("保存", action: save)
+                Button("Save", action: save)
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -24,7 +26,7 @@ struct APIKeyField: View {
                 .font(.caption)
                 .foregroundStyle(.red)
         } else {
-            Text(isSaved ? "Keychain に保存済み(\(service))" : "未登録(\(service))")
+            Text(isSaved ? "Saved in Keychain (\(service))" : "Not set (\(service))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -32,13 +34,14 @@ struct APIKeyField: View {
 
     private var failureMessage: String {
         Keychain.isAcceptableKey(draft) || draft.isEmpty
-            ? "Keychain に保存できませんでした"
-            : "改行などの制御文字を含むキーは保存できません"
+            ? "Couldn't save to Keychain"
+            : "Keys with control characters such as line breaks can't be saved"
     }
 
     private func save() {
         failed = !Keychain.setAPIKey(draft, service: service)
         if !failed { draft = "" }
         isSaved = Keychain.hasKey(service: service)
+        if !failed { onSave() }
     }
 }

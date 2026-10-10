@@ -9,9 +9,9 @@ public enum TranslationTarget: String, Codable, CaseIterable, Identifiable, Send
 
     public var label: String {
         switch self {
-        case .auto: "自動"
-        case .japanese: "日本語へ"
-        case .english: "英語へ"
+        case .auto: "Auto"
+        case .japanese: "To Japanese"
+        case .english: "To English"
         }
     }
 }

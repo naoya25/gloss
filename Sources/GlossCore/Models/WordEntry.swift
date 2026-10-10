@@ -18,6 +18,8 @@ public struct WordEntry: Codable, Identifiable, Hashable, Sendable {
     public var engine: Engine?
     // カードの訳と例文を作れなかった理由。入っている間は自動で作り直さない
     public var cardError: String?
+    // 最後に書き換えた時刻。Cloudflare の単語帳とどちらが新しいかをこれで決める
+    public var updatedAt: Date?
 
     public init(term: String, note: String, context: String) {
         self.term = term

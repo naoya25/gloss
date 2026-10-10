@@ -169,3 +169,179 @@ import Testing
     let decoded = try decoder.decode([HistoryItem].self, from: Data(old.utf8))
     #expect(decoded[0].matches(source: "hi", target: .auto))
 }
+
+private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
+    var entry = WordEntry(term: term, note: "", context: "")
+    entry.updatedAt = millis.map(WordSync.date)
+    return entry
+}
+
+@Test func newerRemoteWordReplacesLocalAndOlderIsIgnored() {
+    let local = word("stop by", updatedAt: 2_000)
+    var newer = local
+    newer.note = "立ち寄る"
+    var older = local
+    older.note = "古い"
+    let merged = WordSync.merge([local], with: [SyncRow(id: local.id.uuidString, updatedAt: 3_000, deleted: false, data: newer)], ledger: SyncLedger())
+    #expect(merged.first?.note == "立ち寄る")
+    #expect(merged.first?.updatedAt == WordSync.date(3_000))
+    let kept = WordSync.merge([local], with: [SyncRow(id: local.id.uuidString, updatedAt: 1_000, deleted: false, data: older)], ledger: SyncLedger())
+    #expect(kept == [local])
+}
+
+@Test func remoteDeletionRemovesWordUnlessLocalChangeIsNewer() {
+    let local = word("grab a drink", updatedAt: 1_000)
+    let deletion = SyncRow(id: local.id.uuidString, updatedAt: 2_000, deleted: true, data: nil)
+    #expect(WordSync.merge([local], with: [deletion], ledger: SyncLedger()).isEmpty)
+    var ledger = SyncLedger()
+    ledger.markChanged(local.id, at: WordSync.date(5_000))
+    #expect(WordSync.merge([local], with: [deletion], ledger: ledger).count == 1)
+}
+
+@Test func locallyDeletedWordIsNotRevivedByOlderRemoteCopy() {
+    let gone = word("let me know", updatedAt: 1_000)
+    var ledger = SyncLedger()
+    ledger.markChanged(gone.id, at: WordSync.date(4_000))
+    let stale = SyncRow(id: gone.id.uuidString, updatedAt: 3_000, deleted: false, data: gone)
+    #expect(WordSync.merge([], with: [stale], ledger: ledger).isEmpty)
+    #expect(ledger.rows(from: []) == [SyncRow(id: gone.id.uuidString, updatedAt: 4_000, deleted: true, data: nil)])
+}
+
+@Test func wordChangedDuringPushStaysPending() {
+    let entry = word("heads up")
+    var ledger = SyncLedger()
+    ledger.markChanged(entry.id, at: WordSync.date(1_000))
+    let sent = ledger.rows(from: [entry])
+    ledger.markChanged(entry.id, at: WordSync.date(2_000))
+    ledger.didPush(sent)
+    #expect(ledger.pending[entry.id.uuidString] == 2_000)
+    ledger.didPush(ledger.rows(from: [entry]))
+    #expect(ledger.pending.isEmpty)
+}
+
+@Test func firstSyncSendsEveryWordWithItsLastTouch() {
+    var reviewed = word("FYI")
+    reviewed.lastReviewed = WordSync.date(7_000)
+    let ledger = SyncLedger.initial(for: [reviewed])
+    #expect(ledger.pending[reviewed.id.uuidString] == 7_000)
+}
+
+@Test func syncURLMustBeHTTPS() {
+    #expect(throws: SyncError.badURL) { try SyncClient(baseURL: "http://example.com", token: "t") }
+    #expect((try? SyncClient(baseURL: " https://gloss-sync.example.workers.dev ", token: "t")) != nil)
+}
+
+@Test func wordQuizIgnoresCaseSpacingAndPunctuation() {
+    var entry = WordEntry(term: "let me know", note: "", context: "")
+    entry.english = "Let me know"
+    #expect(WordQuiz.isCorrect("  let  me KNOW. ", for: entry))
+    #expect(WordQuiz.isCorrect("let me know!", for: entry))
+    #expect(!WordQuiz.isCorrect("let me", for: entry))
+    #expect(!WordQuiz.isCorrect("", for: entry))
+}
+
+@Test func wordTestReviewIsParsed() {
+    let raw = """
+    1: O | 同じ意味
+    2: ? | 名詞ではなく動詞
+    3: X | 意味が違う
+    4: たぶん正解
+    """
+    let grades = Prompts.parseWordTestReview(raw)
+    #expect(grades[1] == WordGrade(verdict: .known, comment: "同じ意味"))
+    #expect(grades[2]?.verdict == .unsure)
+    #expect(grades[3]?.verdict == .notYet)
+    #expect(grades[4] == nil)
+}
+
+@Test func writingTaskAndGradeAreParsed() throws {
+    let task = try #require(Prompts.parseWritingTask("SCENE: Slack\nTASK: レビューのお礼を伝える"))
+    #expect(task == WritingTask(scene: "Slack", task: "レビューのお礼を伝える"))
+    let raw = """
+    SCORE: 72点
+    CORRECTED: Thanks for the review!
+    良かった点: 短い
+    CHUNK: thanks for | 〜をありがとう
+    """
+    let grade = try #require(Prompts.parseWritingGrade(raw))
+    #expect(grade.score == 72)
+    #expect(grade.corrected == "Thanks for the review!")
+    #expect(grade.feedback == "良かった点: 短い")
+    #expect(grade.chunks.map(\.expression) == ["thanks for"])
+    #expect(Prompts.parseWritingGrade("いい感じです") == nil)
+}
+
+@Test func dayReportCountsOnlyThatDay() {
+    let calendar = Calendar(identifier: .gregorian)
+    let day = Date(timeIntervalSince1970: 1_800_000_000)
+    let yesterday = calendar.date(byAdding: .day, value: -1, to: day)!
+    let events = [
+        ActivityEvent(kind: .wordQuiz, title: "単語テスト", score: 7, total: 10, date: day),
+        ActivityEvent(kind: .wordQuiz, title: "単語テスト", score: 3, total: 5, date: day),
+        ActivityEvent(kind: .writing, title: "お題", score: 80, date: day),
+        ActivityEvent(kind: .writing, title: "お題", score: 61, date: day),
+        ActivityEvent(kind: .translated, title: "昨日", date: yesterday),
+    ]
+    let report = DayReport(events: events, on: day, calendar: calendar)
+    #expect(report.events.count == 4)
+    #expect(report.quizCorrect == 10 && report.quizTotal == 15)
+    #expect(report.writingAverage == 71)
+    #expect(report.count(.translated) == 0)
+}
+
+@Test func streakCountsBackFromTodayOrYesterday() {
+    let calendar = Calendar(identifier: .gregorian)
+    let today = Date(timeIntervalSince1970: 1_800_000_000)
+    let day = { (offset: Int) in calendar.date(byAdding: .day, value: -offset, to: today)! }
+    let events = [day(1), day(2), day(4)].map { ActivityEvent(kind: .cardFlipped, title: "x", date: $0) }
+    #expect(events.streak(until: today, calendar: calendar) == 2)
+    let withToday = events + [ActivityEvent(kind: .cardFlipped, title: "x", date: today)]
+    #expect(withToday.streak(until: today, calendar: calendar) == 3)
+    #expect([ActivityEvent]().streak(until: today, calendar: calendar) == 0)
+}
+
+@Test func progressSeriesBuildDailyPoints() {
+    let calendar = Calendar(identifier: .gregorian)
+    let today = Date(timeIntervalSince1970: 1_800_000_000)
+    let day = { (offset: Int) in calendar.date(byAdding: .day, value: -offset, to: today)! }
+    var old = WordEntry(term: "a", note: "", context: "")
+    old.date = day(5)
+    var recent = WordEntry(term: "b", note: "", context: "")
+    recent.date = day(1)
+    let size = ProgressSeries.bookSize([recent, old], days: 3, until: today, calendar: calendar).map(\.value)
+    #expect(size == [1, 2, 2])
+
+    let events = [
+        ActivityEvent(kind: .wordQuiz, title: "t", score: 3, total: 4, date: day(1)),
+        ActivityEvent(kind: .wordQuiz, title: "t", score: 5, total: 6, date: day(1)),
+        ActivityEvent(kind: .cardFlipped, title: "x", date: day(1)),
+        ActivityEvent(kind: .cardFlipped, title: "x", date: day(3)),
+    ]
+    #expect(ProgressSeries.quizAccuracy(events, days: 3, until: today, calendar: calendar).map(\.value) == [80])
+    #expect(ProgressSeries.activity(events, days: 2, until: today, calendar: calendar).map(\.count) == [1, 2])
+    #expect(ProgressSeries.longestStreak(events + [ActivityEvent(kind: .translated, title: "x", date: day(2))], calendar: calendar) == 3)
+    #expect(ProgressSeries.studyDays(events, calendar: calendar) == 2)
+}
+
+@Test func meaningTestAcceptsAnyListedJapaneseVariant() {
+    var entry = WordEntry(term: "let me know", note: "", context: "")
+    entry.english = "let me know"
+    entry.japanese = "知らせてね・教えて"
+    #expect(WordQuiz.isCorrect("教えて", for: entry, direction: .toJapanese))
+    #expect(WordQuiz.isCorrect(" 知らせてね。", for: entry, direction: .toJapanese))
+    #expect(!WordQuiz.isCorrect("知らせて", for: entry, direction: .toJapanese))
+    #expect(WordDirection.toJapanese.prompt(for: entry) == "let me know")
+    #expect(WordDirection.toJapanese.expected(for: entry) == "知らせてね・教えて")
+}
+
+@Test func wordTestsOfBothDirectionsCountTowardAccuracy() {
+    let day = Date(timeIntervalSince1970: 1_800_000_000)
+    let events = [
+        ActivityEvent(kind: .wordQuiz, title: "t", score: 8, total: 10, date: day),
+        ActivityEvent(kind: .meaningQuiz, title: "t", score: 2, total: 10, date: day),
+        ActivityEvent(kind: .reading, title: "t", score: 90, date: day),
+    ]
+    let report = DayReport(events: events, on: day, calendar: Calendar(identifier: .gregorian))
+    #expect(report.quizCorrect == 10 && report.quizTotal == 20)
+    #expect(report.readingAverage == 90 && report.writingAverage == nil)
+}

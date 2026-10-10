@@ -91,6 +91,19 @@ API キーは設定画面の「API キー」欄に貼って「保存」で登録
 
 単語帳・履歴・設定は `~/Library/Application Support/Gloss/` に JSON で保存する。
 
+### 単語帳の同期(Cloudflare)
+
+単語帳は Cloudflare D1 に置ける。設定の「単語帳の同期」に Worker の URL と合言葉を入れると、
+変えた単語を1秒後に送り、Gloss に戻ってきたときにほかの Mac の変更を取ってくる。
+同じ単語を両方で変えたときは、後から変えたほうが残る。`words.json` は電波が無いときの控えになる。
+
+```sh
+cd cloud
+npx wrangler d1 execute gloss --remote --file=schema.sql   # 初回だけ
+npx wrangler deploy
+npx wrangler secret put SYNC_TOKEN                          # 合言葉。Gloss の設定にも同じものを入れる
+```
+
 ## ビルドとインストール
 
 ```sh
