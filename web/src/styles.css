@@ -83,7 +83,7 @@ select { background: var(--surface); border: 1px solid var(--line); border-radiu
 .question input:focus { border-bottom-color: var(--accent); }
 .result { display: grid; gap: 6px; }
 .expected { color: var(--known); }
-.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .actions button, .login button { min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 button:disabled { opacity: 0.6; }
@@ -126,3 +126,6 @@ button:disabled { opacity: 0.6; }
   .card-text { animation: none; }
   .card { transition: none; }
 }
+.share { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -8px 0 20px; }
+.share button { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.share button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }

@@ -3,7 +3,7 @@ import { Mastery, expectedFor, masteryLabel, promptFor, type Direction, type Wor
 import { isExactAnswer } from "../../core/quiz";
 import { useWords } from "../../stores/words";
 import { MasteryMark } from "../../widgets/mastery";
-import { isGraded, useTest } from "./store";
+import { isAttempted, isGraded, pendingCount, useTest } from "./store";
 
 export function TestPage() {
   const loaded = useWords((state) => state.loaded);
@@ -11,6 +11,8 @@ export function TestPage() {
   const { direction, quizzes, setDirection, open, start, setAnswer, grade } = useTest();
   const quiz = quizzes[direction];
   const graded = isGraded(quiz);
+  const attempted = isAttempted(quiz);
+  const pending = pendingCount(quiz);
 
   useEffect(() => {
     if (loaded) open();
@@ -57,12 +59,24 @@ export function TestPage() {
             onAnswer={(value) => setAnswer(word.id, value)}
           />
         ))}
-        {quiz.error && <p className="error">{quiz.error}</p>}
+        {pending > 0 && (
+          <p className="error">
+            {quiz.error ? `${quiz.error} ` : ""}
+            {pending} {pending === 1 ? "answer has" : "answers have"} no result. Mark them above, or try the AI again. Unmarked ones aren't saved.
+          </p>
+        )}
         <div className="actions">
-          {graded ? (
+          {attempted ? (
             <>
-              <button type="button" onClick={() => start()}>New Test</button>
-              {missed > 0 && (
+              {pending > 0 && (
+                <button type="button" disabled={quiz.grading} onClick={() => void grade()}>
+                  {quiz.grading ? "Checking…" : "Ask AI Again"}
+                </button>
+              )}
+              <button type="button" className={missed > 0 && graded ? undefined : "primary"} onClick={() => start()}>
+                New Test
+              </button>
+              {graded && missed > 0 && (
                 <button type="button" className="primary" onClick={() => start(true)}>
                   Retry {missed} Missed
                 </button>

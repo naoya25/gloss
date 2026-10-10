@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { activityLabel } from "../../core/models";
 import { averageScore, bookSize, countKind, dailyCounts, eventsOn, lastDays, quizTotals, streak } from "../../core/report";
+import { reportImage, reportMarkdown, type ReportSummary } from "../../core/reportCard";
 import { useActivity } from "../../stores/activity";
 import { useWords } from "../../stores/words";
 
@@ -56,6 +57,7 @@ function Today() {
           </div>
         ))}
       </div>
+      {today.length > 0 && <ShareReport summary={{ day: new Date(), streak: days, events: today }} />}
       {today.length === 0 ? (
         <p className="empty">Nothing yet today. Flip some cards or take a test.</p>
       ) : (
@@ -71,6 +73,69 @@ function Today() {
         </ul>
       )}
     </>
+  );
+}
+
+// 画像は開いたときに作っておく。押してから作ると、iPhone の Safari が共有を「操作の直後ではない」として断るため
+function ShareReport({ summary }: { summary: ReportSummary }) {
+  const [image, setImage] = useState<Blob | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const key = summary.events.map((event) => event.id).join(",");
+
+  useEffect(() => {
+    let alive = true;
+    void reportImage(summary).then((blob) => alive && setImage(blob));
+    return () => {
+      alive = false;
+    };
+    // 記録が増えたときだけ描き直す
+  }, [key, summary.streak]);
+
+  function flash(text: string) {
+    setStatus(text);
+    setTimeout(() => setStatus(null), 1800);
+  }
+
+  async function shareImage() {
+    if (!image) return;
+    const file = new File([image], `gloss-report-${summary.day.toISOString().slice(0, 10)}.png`, { type: "image/png" });
+    try {
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] });
+      } else if ("ClipboardItem" in window) {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": image })]);
+        flash("Copied");
+      } else {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(file);
+        link.download = file.name;
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }
+    } catch (error) {
+      if ((error as Error).name !== "AbortError") flash("Couldn't share");
+    }
+  }
+
+  async function copyText() {
+    try {
+      await navigator.clipboard.writeText(reportMarkdown(summary));
+      flash("Copied");
+    } catch {
+      flash("Couldn't copy");
+    }
+  }
+
+  return (
+    <div className="share">
+      <button type="button" className="primary" disabled={!image} onClick={() => void shareImage()}>
+        Share Image
+      </button>
+      <button type="button" onClick={() => void copyText()}>
+        Copy as Markdown
+      </button>
+      {status && <span className="sub">{status}</span>}
+    </div>
   );
 }
 
