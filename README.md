@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Resources/icon/AppIcon.svg" width="128" alt="Gloss のアイコン">
+<img src="mac/Resources/icon/AppIcon.svg" width="128" alt="Gloss のアイコン">
 
 # Gloss
 
@@ -118,6 +118,7 @@ npx wrangler secret put SYNC_TOKEN                           # 合言葉。Gloss
 ## ビルドとインストール
 
 ```sh
+cd mac
 ./scripts/install.sh     # ビルドして ~/Applications/Gloss.app に入れる(前のものは置き換える)
 ./scripts/build-app.sh   # build/Gloss.app を作るだけ
 swift test               # GlossCore のテスト
@@ -258,22 +259,30 @@ SQL のテーブルは Cloudflare D1 の `words`(Book の単語)と `activity`(�
 ## フォルダ構成
 
 ```
-Sources/
-├── Gloss/                    アプリ(SwiftUI)
-│   ├── GlossApp.swift        Store を作って画面に渡す
-│   ├── Router/               サイドバーの行き先(AppRoute)
-│   ├── Pages/
-│   │   ├── Translate/        翻訳画面
-│   │   ├── Ask/              右の質問パネル
-│   │   ├── Words/            Book(フラッシュカード)
-│   │   ├── Challenge/        4つのテスト
-│   │   ├── Report/           今日の記録と推移のグラフ
-│   │   ├── History/          履歴
-│   │   ├── Settings/         設定
-│   │   └── Root/             分割ビューとサイドバー
-│   └── Widgets/              画面をまたいで使う部品
-└── GlossCore/                UI に依存しない部分(テストあり)
-    ├── Models/               単語・テスト・記録・同期のデータと計算
-    └── Repositories/         AI との通信・プロンプト・同期・保存・Keychain
-cloud/                        Cloudflare Worker と D1 のスキーマ
+gloss/
+├── mac/                          Mac アプリ(Swift Package)
+│   ├── Package.swift
+│   ├── Sources/
+│   │   ├── Gloss/                アプリ(SwiftUI)
+│   │   │   ├── GlossApp.swift    Store を作って画面に渡す
+│   │   │   ├── Router/           サイドバーの行き先(AppRoute)
+│   │   │   ├── Pages/
+│   │   │   │   ├── Translate/    翻訳画面
+│   │   │   │   ├── Ask/          右の質問パネル
+│   │   │   │   ├── Words/        Book(フラッシュカード)
+│   │   │   │   ├── Challenge/    4つのテスト
+│   │   │   │   ├── Report/       今日の記録と推移のグラフ
+│   │   │   │   ├── History/      履歴
+│   │   │   │   ├── Settings/     設定
+│   │   │   │   └── Root/         分割ビューとサイドバー
+│   │   │   └── Widgets/          画面をまたいで使う部品
+│   │   └── GlossCore/            UI に依存しない部分(テストあり)
+│   │       ├── Models/           単語・テスト・記録・同期のデータと計算
+│   │       └── Repositories/     AI との通信・プロンプト・同期・保存・Keychain
+│   ├── Tests/
+│   ├── Resources/                Info.plist・アイコン
+│   └── scripts/                  ビルドとインストール
+├── web/                          スマホ向けの Web アプリ(これから作る)
+├── cloud/                        Cloudflare Worker と D1 のスキーマ。mac も web も使う
+└── docs/                         README の図とスクショ
 ```
