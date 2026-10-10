@@ -9,7 +9,7 @@
 英語だけで会社の業務を回せるようになるための macOS アプリ。<br>
 訳した文から覚える表現を集めて Book にし、4種類のテストで腕試しして、毎日の記録をグラフで見る。
 
-macOS 14 以上 · 日本語 ⇄ 英語 · JAPAN AI Gateway / OpenAI / Gemini · 単語帳は Cloudflare に同期
+macOS 14 以上 · 日本語 ⇄ 英語 · JAPAN AI Gateway / OpenAI / Gemini · 単語帳は Cloudflare に同期 · スマホは Web アプリで復習
 
 <img src="docs/screenshots/translate.png" width="820" alt="Gloss の Translate 画面。左のサイドバーに Translate・Book・Challenge(Word Test・Meaning Test・Writing Test・Reading Test)・Report・History が並び、右に英文とその日本語訳が出ている">
 
@@ -79,6 +79,17 @@ macOS 14 以上 · 日本語 ⇄ 英語 · JAPAN AI Gateway / OpenAI / Gemini ·
 
 Book の語数のグラフは、単語を追加した日から数えるので過去の分も出る。それ以外の記録は、記録を始めてからの分だけ。
 
+### スマホで復習する(Web アプリ)
+
+スマホでは Book・Word Test・Meaning Test・Report を使える。単語帳と記録は Mac と同じ Cloudflare D1 を読み書きするので、どちらでやっても記録がそろう。
+
+1. Mac の設定(⌘,)の「Book Sync」で「Show QR Code」を押す
+2. スマホのカメラで QR コードを読んで開く。合言葉は URL の `#` の後ろに入っていて、サーバーには送られない
+3. 共有メニューから「ホーム画面に追加」すると、アプリのように開ける
+
+単語テストで答えが Book と完全に同じでないときは、Worker が JAPAN AI に採点させる。AI に届かなかった問題は、正解を見て自分で ✓ / ? / ✕ を付ける。
+設計は [docs/web-design.md](docs/web-design.md)。
+
 ## キーボードショートカット
 
 | キー | 動き |
@@ -113,6 +124,16 @@ npx wrangler d1 create gloss                                 # 初回だけ。�
 npx wrangler d1 execute gloss --remote --file=schema.sql     # 初回だけ
 npx wrangler deploy
 npx wrangler secret put SYNC_TOKEN                           # 合言葉。Gloss の設定にも同じものを入れる
+npx wrangler secret put AI_KEY                               # スマホの採点に使う JAPAN AI のキー
+npx wrangler secret put JAI_USER_ID                          # JAPAN AI のユーザーID
+npx wrangler secret put AI_MODEL                             # 採点に使うモデル
+```
+
+Web アプリは `cloud/` の Worker が一緒に配信する。デプロイの前に `web/` でビルドする。
+
+```sh
+cd web && npm install && npm test && npm run build
+cd ../cloud && npx wrangler deploy
 ```
 
 ## ビルドとインストール
@@ -282,7 +303,7 @@ gloss/
 │   ├── Tests/
 │   ├── Resources/                Info.plist・アイコン
 │   └── scripts/                  ビルドとインストール
-├── web/                          スマホ向けの Web アプリ(これから作る)
+├── web/                          スマホ向けの Web アプリ(Vite + React + TypeScript)
 ├── cloud/                        Cloudflare Worker と D1 のスキーマ。mac も web も使う
 └── docs/                         README の図とスクショ
 ```
