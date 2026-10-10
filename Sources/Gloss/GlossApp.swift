@@ -35,7 +35,7 @@ struct GlossApp: App {
         _activity = State(initialValue: activity)
         _words = State(initialValue: words)
         _ask = State(initialValue: AskStore(settings: settings, words: words))
-        _translate = State(initialValue: TranslateStore(settings: settings, history: history, activity: activity))
+        _translate = State(initialValue: TranslateStore(settings: settings, history: history, activity: activity, words: words))
         _quiz = State(initialValue: QuizStore(settings: settings, words: words, activity: activity))
     }
 

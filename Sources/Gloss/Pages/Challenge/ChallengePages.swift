@@ -519,9 +519,9 @@ private struct WritingGradeView: View {
                     .foregroundStyle(tint)
                 Text("pts").foregroundStyle(.secondary)
                 Spacer()
-                Button("Show Review", action: showReview)
-                    .disabled(ask.state.focus == reviewFocus && ask.state.isPanelOpen)
-                    .help("Show the full review in the side panel")
+                Button("Ask About This", action: showReview)
+                    .disabled(ask.state.focus == reviewFocus && ask.state.isPanelOpen && ask.state.thread.isEmpty)
+                    .help("Ask about this review in the side panel")
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(kind == .writing ? "Natural English" : "Model Translation").font(.caption).foregroundStyle(.secondary)
@@ -540,8 +540,8 @@ private struct WritingGradeView: View {
                         .padding(.horizontal, 16)
                 }
                 Text(kind == .writing
-                    ? "Select a word or phrase to ask about it. Bookmark it in the side panel to save it to your Book."
-                    : "Select a word or phrase in the English above to ask about it. Bookmark it in the side panel to save it to your Book.")
+                    ? "Select a word or phrase to ask about it in the side panel."
+                    : "Select a word or phrase in the English above to ask about it in the side panel.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, kind == .writing ? 0 : 16)
@@ -549,6 +549,12 @@ private struct WritingGradeView: View {
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(0.08)))
+            Text(LocalizedStringKey(grade.feedback))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            if !grade.chunks.isEmpty {
+                ReviewChunks(kind: kind, chunks: grade.chunks)
+            }
         }
         .transition(.opacity)
     }
@@ -575,6 +581,40 @@ private struct WritingGradeView: View {
     }
 }
 
+// 採点から抜き出した覚える表現。押したものだけ Book に入れる
+private struct ReviewChunks: View {
+    @Environment(QuizStore.self) private var quiz
+    @Environment(WordsStore.self) private var words
+    let kind: ExerciseKind
+    let chunks: [StudyChunk]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Expressions to learn", systemImage: "bookmark")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(chunks) { chunk in
+                let isSaved = words.entry(for: chunk.expression) != nil
+                Button {
+                    quiz.toggleChunk(chunk, in: kind)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                            .foregroundStyle(isSaved ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        Text(chunk.expression).fontWeight(.semibold)
+                        if !chunk.meaning.isEmpty {
+                            Text(chunk.meaning).foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(.callout)
+                }
+                .buttonStyle(.plain)
+                .help(isSaved ? "In your Book. Click to remove it" : "Click to add it to your Book")
+            }
+        }
+    }
+}
+
 extension AskStore {
     // 英作テストは直した英文を、英文訳テストは元の英文を見出しにする。覚える表現はどちらも英文から出る
     func openReview(_ kind: ExerciseKind, task: WritingTask, answer: String, grade: WritingGrade) {
@@ -584,7 +624,6 @@ extension AskStore {
                 focus: grade.corrected,
                 source: "英作テストのお題(\(task.scene)): \(task.task)\n学習者の英文: \(answer)",
                 translation: grade.corrected,
-                request: "この英文を採点して: \(answer)",
                 grade: grade
             )
         case .reading:
@@ -592,7 +631,6 @@ extension AskStore {
                 focus: task.task,
                 source: task.task,
                 translation: "模範訳: \(grade.corrected)\n学習者の訳: \(answer)",
-                request: "この英文をこう訳しました: \(answer)",
                 grade: grade
             )
         }

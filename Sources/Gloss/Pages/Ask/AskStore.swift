@@ -67,18 +67,16 @@ final class AskStore {
     }
 
     // 英作・英文訳テストの採点を、解説として右のパネルに出す。見出しの英文について続けて質問できる
-    func openReview(focus: String, source: String, translation: String, request: String, grade: WritingGrade) {
+    // 解説は本文に出しているので、パネルは空の会話から始める。解説は AI に渡す文脈にだけ入れる
+    func openReview(focus: String, source: String, translation: String, grade: WritingGrade) {
         task?.cancel()
         state.isAsking = false
         state.focus = focus
         state.error = nil
         self.source = source
-        self.translation = translation
-        state.thread = [
-            ChatMessage(.user, request),
-            ChatMessage(.assistant, "\(grade.score) 点\n\n\(grade.feedback)"),
-        ]
-        state.chunks = grade.chunks
+        self.translation = translation + "\n\n# 採点(\(grade.score) 点)と解説\n" + grade.feedback
+        state.thread = []
+        state.chunks = []
         handledChunks = []
         removedEntries = [:]
         savesChunksAutomatically = false

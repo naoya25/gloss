@@ -37,6 +37,7 @@ final class WordsStore {
         let words = JSONFile<[WordEntry]>(AppPaths.words).load() ?? []
         state = WordsState(words: words)
         ledger = JSONFile<SyncLedger>(AppPaths.sync).load() ?? .initial(for: words)
+        removeDuplicates()
         sync()
     }
 
@@ -49,7 +50,8 @@ final class WordsStore {
     }
 
     func entry(for term: String) -> WordEntry? {
-        state.words.first { $0.term.caseInsensitiveCompare(term) == .orderedSame }
+        let key = WordEntry.key(for: term)
+        return state.words.first { $0.key == key }
     }
 
     func didOpen() {
@@ -103,7 +105,7 @@ final class WordsStore {
 
     // 質問の答えを単語帳に入れる。外した直後の単語を戻すときは、学習記録ごと戻す
     func saveAnswer(term: String, note: String, context: String, restoring removed: WordEntry?) {
-        if let index = state.words.firstIndex(where: { $0.term.caseInsensitiveCompare(term) == .orderedSame }) {
+        if let index = state.words.firstIndex(where: { $0.key == WordEntry.key(for: term) }) {
             state.words[index].note = note
             if !context.isEmpty { state.words[index].context = context }
             commit(state.words[index].id)
@@ -122,9 +124,18 @@ final class WordsStore {
         fillCardPairs()
     }
 
+    // 翻訳から自動で抜き出した表現を入れる。もう Book にある単語は、説明も学習記録もそのままにする
+    @discardableResult
+    func saveExtracted(term: String, meaning: String, context: String) -> Bool {
+        guard entry(for: term) == nil else { return false }
+        saveAnswer(term: term, note: meaning, context: context, restoring: nil)
+        return true
+    }
+
     func remove(term: String) -> WordEntry? {
-        let matches = state.words.filter { $0.term.caseInsensitiveCompare(term) == .orderedSame }
-        state.words.removeAll { $0.term.caseInsensitiveCompare(term) == .orderedSame }
+        let key = WordEntry.key(for: term)
+        let matches = state.words.filter { $0.key == key }
+        state.words.removeAll { $0.key == key }
         commit(matches.map(\.id))
         return matches.first
     }
@@ -219,6 +230,7 @@ final class WordsStore {
             let page = try await client.pull(since: ledger.cursor)
             state.words = WordSync.merge(state.words, with: page.words, ledger: ledger)
             ledger.cursor = page.cursor
+            removeDuplicates()
             hasMore = page.hasMore
             saveWords()
             saveLedger()
@@ -227,6 +239,15 @@ final class WordsStore {
             state.openCardID = nil
         }
         fillCardPairs()
+    }
+
+    // 別の Mac で同じ単語を足したときなど、同じ単語が2つになったら1つにまとめる
+    private func removeDuplicates() {
+        let result = WordDedupe.merge(state.words)
+        guard !result.removedIDs.isEmpty else { return }
+        state.words = result.words
+        if let open = state.openCardID, result.removedIDs.contains(open) { state.openCardID = nil }
+        commit(result.changedIDs + result.removedIDs)
     }
 
     private func commit(_ id: UUID) {

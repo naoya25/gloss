@@ -370,3 +370,28 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     let events = try decoder.decode([ActivityEvent].self, from: Data(json.utf8))
     #expect(events.first?.answers == nil && events.first?.score == 7)
 }
+
+@Test func wordKeyIgnoresCaseSpacingAndPunctuation() {
+    #expect(WordEntry.key(for: "  Let  me Know. ") == "let me know")
+    #expect(WordEntry.key(for: "don’t worry") == WordEntry.key(for: "Don't worry!"))
+    #expect(WordEntry.key(for: "LGTM") != WordEntry.key(for: "LGTM it"))
+}
+
+@Test func duplicateWordsMergeIntoTheOldestWithCombinedRecords() {
+    var old = WordEntry(term: "stop by", note: "立ち寄る", context: "")
+    old.date = Date(timeIntervalSince1970: 100)
+    old.flips = 2
+    old.mastery = .unsure
+    old.lastReviewed = Date(timeIntervalSince1970: 200)
+    var dup = WordEntry(term: "Stop by.", note: "", context: "Feel free to stop by.")
+    dup.date = Date(timeIntervalSince1970: 150)
+    dup.flips = 3
+    dup.mastery = .known
+    dup.lastReviewed = Date(timeIntervalSince1970: 300)
+    let other = WordEntry(term: "grab a drink", note: "", context: "")
+    let result = WordDedupe.merge([dup, other, old])
+    #expect(result.words.count == 2)
+    let merged = try! #require(result.words.first { $0.id == old.id })
+    #expect(merged.flips == 5 && merged.mastery == .known && merged.note == "立ち寄る" && merged.context == "Feel free to stop by.")
+    #expect(result.removedIDs == [dup.id] && result.changedIDs == [old.id])
+}

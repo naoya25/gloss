@@ -8,6 +8,7 @@ struct TranslatePage: View {
             TranslateControls()
             Divider()
             TranslationResult()
+            ExtractedWords()
         }
         .background(Color(nsColor: .textBackgroundColor))
     }
@@ -144,6 +145,75 @@ private struct TranslationResult: View {
             }
         }
         .animation(.snappy(duration: 0.2), value: showsAskButton)
+    }
+}
+
+// 訳が出たあとに Book に入れた表現を、訳文の下に1行で並べる。押すと外せる
+private struct ExtractedWords: View {
+    @Environment(TranslateStore.self) private var translate
+
+    var body: some View {
+        let state = translate.state
+        if state.isExtracting || !state.extracted.isEmpty {
+            VStack(spacing: 0) {
+                Divider()
+                HStack(spacing: 10) {
+                    Label("Added to Book", systemImage: "bookmark.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                    if state.isExtracting {
+                        ProgressView().controlSize(.small)
+                        Text("Finding words to learn…")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(state.extracted) { chunk in
+                                    ExtractedChip(chunk: chunk)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+            .transition(.opacity)
+        }
+    }
+}
+
+private struct ExtractedChip: View {
+    @Environment(TranslateStore.self) private var translate
+    @Environment(WordsStore.self) private var words
+    let chunk: StudyChunk
+
+    var body: some View {
+        let isSaved = words.entry(for: chunk.expression) != nil
+        Button {
+            translate.toggleSaved(chunk)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                    .foregroundStyle(isSaved ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                Text(chunk.expression)
+                    .foregroundStyle(isSaved ? .primary : .secondary)
+                    .strikethrough(!isSaved)
+            }
+            .font(.callout)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(Capsule().strokeBorder(.separator))
+        }
+        .buttonStyle(.plain)
+        .help(chunk.meaning.isEmpty
+            ? (isSaved ? "In your Book. Click to remove it" : "Click to add it back")
+            : "\(chunk.meaning) — \(isSaved ? "click to remove it from your Book" : "click to add it back")")
     }
 }
 

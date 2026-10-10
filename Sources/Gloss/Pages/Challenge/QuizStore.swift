@@ -52,6 +52,8 @@ final class QuizStore {
     private let activity: ActivityStore
     private var wordTasks: [WordDirection: Task<Void, Never>] = [:]
     private var exerciseTasks: [ExerciseKind: Task<Void, Never>] = [:]
+    // 外した直後に戻せるよう、外した単語を学習記録ごと取っておく
+    private var removedChunks: [String: WordEntry] = [:]
 
     init(settings: SettingsStore, words: WordsStore, activity: ActivityStore) {
         self.settings = settings
@@ -156,6 +158,18 @@ final class QuizStore {
         let exercise = state[kind]
         guard exercise.task == nil, !exercise.isLoading, exercise.error == nil else { return }
         nextExercise(kind)
+    }
+
+    // 採点から抜き出した表現を、押したときだけ Book に入れる・外す。用例は直した英文か、元の英文
+    func toggleChunk(_ chunk: StudyChunk, in kind: ExerciseKind) {
+        if words.entry(for: chunk.expression) != nil {
+            removedChunks[chunk.id] = words.remove(term: chunk.expression)
+            return
+        }
+        let exercise = state[kind]
+        let context = kind == .writing ? exercise.grade?.corrected ?? "" : exercise.task?.task ?? ""
+        words.saveAnswer(term: chunk.expression, note: chunk.meaning, context: Sentence.containing(chunk.expression, in: context) ?? context, restoring: removedChunks[chunk.id])
+        removedChunks[chunk.id] = nil
     }
 
     func setExerciseAnswer(_ answer: String, for kind: ExerciseKind) {
