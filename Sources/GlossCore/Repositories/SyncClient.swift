@@ -20,27 +20,45 @@ public struct SyncClient: Sendable {
     public static let maxRowsPerPush = 100
 
     let endpoint: URL
+    let activityEndpoint: URL
     let token: String
 
     public init(baseURL: String, token: String) throws {
         let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let base = URL(string: trimmed), base.scheme == "https", base.host != nil else { throw SyncError.badURL }
         endpoint = base.appendingPathComponent("api/words")
+        activityEndpoint = base.appendingPathComponent("api/activity")
         self.token = token
     }
 
     public func pull(since cursor: Int) async throws -> SyncPage {
-        var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "since", value: String(cursor))]
-        let data = try await send(URLRequest(url: components.url!))
-        return try Self.decoder.decode(SyncPage.self, from: data)
+        try await get(endpoint, since: cursor)
     }
 
     public func push(_ rows: [SyncRow]) async throws {
-        var request = URLRequest(url: endpoint)
+        try await post(endpoint, ["words": rows])
+    }
+
+    public func pullActivity(since cursor: Int) async throws -> ActivityPage {
+        try await get(activityEndpoint, since: cursor)
+    }
+
+    public func pushActivity(_ rows: [ActivityRow]) async throws {
+        try await post(activityEndpoint, ["events": rows])
+    }
+
+    private func get<Page: Decodable>(_ url: URL, since cursor: Int) async throws -> Page {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "since", value: String(cursor))]
+        let data = try await send(URLRequest(url: components.url!))
+        return try Self.decoder.decode(Page.self, from: data)
+    }
+
+    private func post(_ url: URL, _ body: some Encodable) async throws {
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try Self.encoder.encode(["words": rows])
+        request.httpBody = try Self.encoder.encode(body)
         _ = try await send(request)
     }
 

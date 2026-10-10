@@ -1,5 +1,6 @@
-// Gloss の単語帳を D1 に置く API。
-// 1単語を1行で持ち、updated_at が新しい書き込みだけを受け入れる(後から書いたほうが勝つ)
+// Gloss の単語帳と学習の記録を D1 に置く API。
+// 単語は1単語を1行で持ち、updated_at が新しい書き込みだけを受け入れる(後から書いたほうが勝つ)。
+// 記録は足すだけで、書き換えない
 const PAGE_SIZE = 500;
 const MAX_ROWS_PER_PUSH = 200;
 
@@ -13,6 +14,12 @@ export default {
     }
     if (url.pathname === "/api/words" && request.method === "POST") {
       return push(request, env);
+    }
+    if (url.pathname === "/api/activity" && request.method === "GET") {
+      return pullActivity(env, Number(url.searchParams.get("since") ?? 0));
+    }
+    if (url.pathname === "/api/activity" && request.method === "POST") {
+      return pushActivity(request, env);
     }
     return json({ error: "not found" }, 404);
   },
@@ -64,6 +71,64 @@ async function push(request, env) {
     );
   }
   return json({ ok: true });
+}
+
+async function pullActivity(env, since) {
+  if (!Number.isInteger(since) || since < 0) return json({ error: "bad since" }, 400);
+  const { results } = await env.DB.prepare(
+    "SELECT id, kind, date, word_id, data, seq FROM activity WHERE seq > ? ORDER BY seq LIMIT ?",
+  )
+    .bind(since, PAGE_SIZE)
+    .all();
+  const events = results.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    date: row.date,
+    wordID: row.word_id ?? undefined,
+    data: JSON.parse(row.data),
+  }));
+  const cursor = results.length ? results[results.length - 1].seq : since;
+  return json({ events, cursor, hasMore: results.length === PAGE_SIZE });
+}
+
+// 記録は書き換えないので、同じ id がもうあれば何もしない
+async function pushActivity(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "bad json" }, 400);
+  }
+  const rows = Array.isArray(body?.events) ? body.events : null;
+  if (!rows || rows.length > MAX_ROWS_PER_PUSH || !rows.every(isValidActivity)) {
+    return json({ error: "bad events" }, 400);
+  }
+  const statement = env.DB.prepare(
+    `INSERT INTO activity (id, kind, date, word_id, data, seq)
+     VALUES (?1, ?2, ?3, ?4, ?5, (SELECT COALESCE(MAX(seq), 0) + 1 FROM activity))
+     ON CONFLICT (id) DO NOTHING`,
+  );
+  if (rows.length) {
+    await env.DB.batch(
+      rows.map((row) => statement.bind(row.id, row.kind, row.date, row.wordID ?? null, JSON.stringify(row.data))),
+    );
+  }
+  return json({ ok: true });
+}
+
+function isValidActivity(row) {
+  return (
+    typeof row?.id === "string" &&
+    row.id.length > 0 &&
+    row.id.length <= 64 &&
+    typeof row.kind === "string" &&
+    row.kind.length <= 32 &&
+    Number.isSafeInteger(row.date) &&
+    (row.wordID == null || (typeof row.wordID === "string" && row.wordID.length <= 64)) &&
+    typeof row.data === "object" &&
+    row.data !== null &&
+    row.data.id === row.id
+  );
 }
 
 function isValidRow(row) {

@@ -145,7 +145,11 @@ final class QuizStore {
             words.recordQuizAnswer(id, mastery: grade.verdict)
         }
         let kind: ActivityKind = direction == .toEnglish ? .wordQuiz : .meaningQuiz
-        activity.record(kind, title: kind.label, score: state[direction].knownCount, total: state[direction].questions.count)
+        let quiz = state[direction]
+        let answers = quiz.questions.compactMap { word in
+            grades[word.id].map { WordAnswer(wordID: word.id, prompt: direction.prompt(for: word), answer: quiz.answer(for: word.id), verdict: $0.verdict) }
+        }
+        activity.record(ActivityEvent(kind: kind, title: kind.label, score: quiz.knownCount, total: quiz.questions.count, answers: answers))
     }
 
     func openExercise(_ kind: ExerciseKind) {
@@ -210,7 +214,7 @@ final class QuizStore {
                 if let grade = Prompts.parseWritingGrade(raw) {
                     state[kind].grade = grade
                     state[kind].scores.append(grade.score)
-                    activity.record(kind == .writing ? .writing : .reading, title: current.task, score: grade.score, detail: grade.corrected)
+                    activity.record(ActivityEvent(kind: kind == .writing ? .writing : .reading, title: current.task, score: grade.score, detail: grade.corrected, answer: answer))
                 } else {
                     state[kind].error = "Couldn't read the score. Please submit again."
                 }

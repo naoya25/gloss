@@ -76,7 +76,7 @@ final class WordsStore {
         state.openCardID = id
         guard let index = state.words.firstIndex(where: { $0.id == id }) else { return true }
         state.words[index].recordFlip()
-        activity.record(.cardFlipped, title: state.words[index].term)
+        activity.record(.cardFlipped, title: state.words[index].term, wordID: id)
         commit(id)
         return true
     }
@@ -116,7 +116,7 @@ final class WordsStore {
             var entry = WordEntry(term: term, note: note, context: context)
             entry.engine = settings.state.engine
             state.words.insert(entry, at: 0)
-            activity.record(.wordSaved, title: term)
+            activity.record(.wordSaved, title: term, wordID: entry.id)
             commit(entry.id)
         }
         fillCardPairs()

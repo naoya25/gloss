@@ -345,3 +345,28 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     #expect(report.quizCorrect == 10 && report.quizTotal == 20)
     #expect(report.readingAverage == 90 && report.writingAverage == nil)
 }
+
+@Test func activityMergeAddsOnlyUnknownEventsInDateOrder() {
+    let early = ActivityEvent(kind: .cardFlipped, title: "a", date: Date(timeIntervalSince1970: 100))
+    let late = ActivityEvent(kind: .translated, title: "b", date: Date(timeIntervalSince1970: 300))
+    let middle = ActivityEvent(kind: .wordSaved, title: "c", date: Date(timeIntervalSince1970: 200))
+    let merged = ActivitySync.merge([early, late], with: [ActivityRow(middle), ActivityRow(early)])
+    #expect(merged.map(\.title) == ["a", "c", "b"])
+}
+
+@Test func activityLedgerSendsPendingOnce() {
+    let event = ActivityEvent(kind: .writing, title: "t", score: 80, answer: "Thanks!")
+    var ledger = ActivityLedger.initial(for: [event])
+    let rows = ledger.rows(from: [event])
+    #expect(rows.count == 1 && rows[0].kind == "writing" && rows[0].data.answer == "Thanks!")
+    ledger.didPush(rows)
+    #expect(ledger.rows(from: [event]).isEmpty)
+}
+
+@Test func oldActivityEventsStillDecode() throws {
+    let json = #"[{"id":"3BAF57C6-1691-40CE-8F42-01BF58DBEC98","date":"2026-10-09T15:29:42Z","kind":"wordQuiz","title":"Word Test","score":7,"total":10}]"#
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let events = try decoder.decode([ActivityEvent].self, from: Data(json.utf8))
+    #expect(events.first?.answers == nil && events.first?.score == 7)
+}

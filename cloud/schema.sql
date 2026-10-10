@@ -8,3 +8,16 @@ CREATE TABLE IF NOT EXISTS words (
   seq INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS words_seq ON words (seq);
+
+-- 学習の記録。何をやったかはこの表だけを正とする。一度書いた行は書き換えない。
+-- word_id は単語を保存した・めくったときの words.id(テストの1問ずつの単語は data の answers に入る)
+CREATE TABLE IF NOT EXISTS activity (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  date INTEGER NOT NULL,
+  word_id TEXT,
+  data TEXT NOT NULL,
+  seq INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS activity_seq ON activity (seq);
+CREATE INDEX IF NOT EXISTS activity_date ON activity (date);

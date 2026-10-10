@@ -24,7 +24,23 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     }
 }
 
-// 今日やったことの画面のために、学習の操作を1件ずつ残す
+// 単語テストの1問ぶんの記録
+public struct WordAnswer: Codable, Hashable, Sendable {
+    public var wordID: UUID
+    public var prompt: String
+    public var answer: String
+    public var verdict: Mastery
+
+    public init(wordID: UUID, prompt: String, answer: String, verdict: Mastery) {
+        self.wordID = wordID
+        self.prompt = prompt
+        self.answer = answer
+        self.verdict = verdict
+    }
+}
+
+// 学習の操作を1件ずつ残す。何をやったかはこの記録だけを正とし、Report もここから数える。
+// 一度書いたら書き換えない
 public struct ActivityEvent: Codable, Identifiable, Hashable, Sendable {
     public var id = UUID()
     public var date = Date()
@@ -33,13 +49,25 @@ public struct ActivityEvent: Codable, Identifiable, Hashable, Sendable {
     public var score: Int?
     public var total: Int?
     public var detail: String?
+    // 単語を保存した・めくったときの、その単語
+    public var wordID: UUID?
+    // 英作・英文訳テストで自分が書いた答え
+    public var answer: String?
+    // 単語テストの1問ずつの答えと判定
+    public var answers: [WordAnswer]?
 
-    public init(kind: ActivityKind, title: String, score: Int? = nil, total: Int? = nil, detail: String? = nil, date: Date = Date()) {
+    public init(
+        kind: ActivityKind, title: String, score: Int? = nil, total: Int? = nil, detail: String? = nil,
+        wordID: UUID? = nil, answer: String? = nil, answers: [WordAnswer]? = nil, date: Date = Date()
+    ) {
         self.kind = kind
         self.title = title
         self.score = score
         self.total = total
         self.detail = detail
+        self.wordID = wordID
+        self.answer = answer
+        self.answers = answers
         self.date = date
     }
 }

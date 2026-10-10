@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-// Store をここで1回だけ作って、画面には environment で渡す。依存は settings・activity → history・words → ask・translate・quiz の向きだけ
+// Store をここで1回だけ作って、画面には environment で渡す。依存は settings → activity・history → words → ask・translate・quiz の向きだけ
 @main
 struct GlossApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -28,7 +28,7 @@ struct GlossApp: App {
     init() {
         let settings = SettingsStore()
         let history = HistoryStore()
-        let activity = ActivityStore()
+        let activity = ActivityStore(settings: settings)
         let words = WordsStore(settings: settings, activity: activity)
         _settings = State(initialValue: settings)
         _history = State(initialValue: history)
@@ -54,6 +54,7 @@ struct GlossApp: App {
                 // 別の Mac で増えた単語を、Gloss に戻ってきたときに取ってくる
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     words.sync()
+                    activity.sync()
                 }
         }
         .defaultSize(width: 1040, height: 680)
