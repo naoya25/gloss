@@ -166,7 +166,7 @@ final class WordsStore {
                 var raw = ""
                 var failure: String?
                 do {
-                    let messages = [ChatMessage(.user, Prompts.cardPair(term: word.term, context: word.context))]
+                    let messages = [ChatMessage(.user, Prompts.cardPair(term: word.term, context: word.context, note: word.note))]
                     for try await chunk in client.stream(messages) { raw += chunk }
                 } catch {
                     failure = error.localizedDescription

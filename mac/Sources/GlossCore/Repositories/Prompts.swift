@@ -147,16 +147,18 @@ public enum Sentence {
 }
 
 extension Prompts {
-    public static func cardPair(term: String, context: String) -> String {
+    // 用例が無い単語(略語など)は意味を取り違えやすいので、保存してある説明も手がかりとして渡す
+    public static func cardPair(term: String, context: String, note: String = "") -> String {
         """
-        英単語カードを作ります。語句「\(term)」について、次の4行だけを出力してください。前置きや説明は付けないでください。
+        英単語カードを作ります。ソフトウェア企業の業務で使う語句「\(term)」について、次の4行だけを出力してください。前置きや説明は付けないでください。
         EN: <英語の語句>
         JA: <日本語の短い訳(1〜3語程度)>
         EX: <英語の語句を使った、短く自然な英語の例文。下の文とは別の文>
         EXJA: <その例文の日本語訳>
         語句が英語なら EN はその語句をそのまま書き、語句が日本語なら JA はその語句をそのまま書いてください。
-        訳は下の文での意味に合わせてください。
+        訳は下の文と説明での意味に合わせてください。例文も業務の場面にしてください。
         文: \(context.isEmpty ? "(なし)" : String(context.prefix(500)))
+        説明: \(note.isEmpty ? "(なし)" : String(note.prefix(300)))
         """
     }
 
