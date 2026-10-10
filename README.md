@@ -103,7 +103,7 @@ API キーは設定画面の「API Key」欄に貼って「Save」で登録す�
 
 ### 単語帳の同期(Cloudflare)
 
-設定の「Book Sync」に Worker の URL と合言葉(Token)を入れると、Book を Cloudflare D1 に置く。
+設定の「Book Sync」に Worker の URL と合言葉(Token)を入れると、Book と学習の記録を Cloudflare D1 に置く。
 変えた単語を1秒後に送り、Gloss に戻ってきたときにほかの Mac の変更を取ってくる。
 同じ単語を両方で変えたときは、後から変えたほうが残る。合言葉は Keychain の `gloss-sync` に入る。
 
@@ -132,54 +132,13 @@ Xcode 26 / Swift 6.3 で確認している。
 Store は `private(set)` の state を1つ持ち、書き換えは Store のメソッドからだけにしている。
 UI に依存しない処理(モデル・プロンプト・採点の読み取り・同期のマージ)は GlossCore に置き、テストしている。
 
-```mermaid
-flowchart LR
-    subgraph Mac["Gloss.app(macOS)"]
-        Pages["Pages<br>Translate / Book / Challenge<br>Report / History / Settings"]
-        Stores["Stores<br>@Observable・private(set) state"]
-        Core["GlossCore<br>Models / Prompts / ChatClient<br>SyncClient / JSONFile / Keychain"]
-        Files[("~/Library/Application Support/Gloss/<br>*.json・images/")]
-        Keychain[("Keychain<br>trapop-* / gloss-sync")]
-        Pages -->|メソッドを呼ぶ| Stores
-        Stores -->|state を読む| Pages
-        Stores --> Core
-        Core --> Files
-        Core --> Keychain
-    end
-
-    subgraph AI["AI(どれか1つ)"]
-        JAI["JAPAN AI Gateway"]
-        OpenAI["OpenAI"]
-        Gemini["Gemini"]
-    end
-
-    subgraph CF["Cloudflare"]
-        Worker["Worker<br>gloss-sync"]
-        D1[("D1<br>words")]
-        Worker --> D1
-    end
-
-    Core -->|翻訳・解説・出題・採点<br>SSE ストリーミング| AI
-    Core -->|GET / POST /api/words<br>Bearer トークン| Worker
-```
+![Gloss は Pages・Stores・GlossCore の3層で、GlossCore が AI と Cloudflare の Worker に話しかけ、手元の JSON と Keychain に保存する](docs/img/architecture.svg)
 
 ### Store どうしの依存
 
-矢印の先が、元の Store を使う。向きは一方向だけ。
+矢印の先が、元の Store を使う。向きは一方向だけ。Settings と Activity は多くの Store が使うので、矢印ではなくタグで示す。
 
-```mermaid
-flowchart LR
-    Settings[SettingsStore] --> Words[WordsStore]
-    Activity[ActivityStore] --> Words
-    Settings --> Translate[TranslateStore]
-    History[HistoryStore] --> Translate
-    Activity --> Translate
-    Words --> Ask[AskStore]
-    Settings --> Ask
-    Words --> Quiz[QuizStore]
-    Settings --> Quiz
-    Activity --> Quiz
-```
+![History が Translate に、Words が Ask と Quiz に使われる。Settings と Activity は、タグの付いた Store が使う土台](docs/img/stores.svg)
 
 | Store | 持っているもの |
 |---|---|
@@ -194,23 +153,15 @@ flowchart LR
 
 ### 同期の流れ
 
-```mermaid
-sequenceDiagram
-    participant G as Gloss(WordsStore)
-    participant L as words.json / sync.json
-    participant W as Worker
-    participant D as D1
-
-    G->>L: 変えた単語に updatedAt を付けて保存し、pending に積む
-    Note over G: 1秒待ってまとめて送る
-    G->>W: POST /api/words(pending の単語)
-    W->>D: updated_at が新しい行だけ書き込み、seq を進める
-    G->>W: GET /api/words?since=cursor
-    W-->>G: cursor より後に書かれた行
-    G->>L: 単語ごとに新しいほうを残して保存し、cursor を進める
-```
+![変えた単語は手元に保存してから1秒後に Worker へ送り、続けて前回の続きから取ってきて、単語ごとに新しいほうを残す](docs/img/sync.svg)
 
 ## データとスキーマ
+
+SQL のテーブルは Cloudflare D1 の `words`(Book の単語)と `activity`(学習の記録)の2つ。
+どちらも `data` 列に、手元の JSON と同じ1件をそのまま入れている。何をやったかは `activity` だけを正とし、Report もここから数える。
+翻訳の履歴と設定は Mac の JSON ファイルにだけ置く。
+
+![SQL のテーブルは D1 の words だけで、data 列に WordEntry を1単語1行で入れる。sync.json の pending が単語の id を持ち、記録は単語を名前でだけ持つ](docs/img/schema.svg)
 
 ### Cloudflare D1
 
@@ -224,16 +175,32 @@ sequenceDiagram
 | `deleted` | INTEGER | 消した単語は 1 |
 | `seq` | INTEGER | 書き込むたびに増える番号。端末は前回の seq より後の行だけを取りに来る |
 
+`activity` の列:
+
+| 列 | 型 | 中身 |
+|---|---|---|
+| `id` | TEXT PRIMARY KEY | ActivityEvent の id(UUID) |
+| `kind` | TEXT | 操作の種類(`cardFlipped`・`wordQuiz` など) |
+| `date` | INTEGER | やった時刻(ミリ秒)。インデックスあり |
+| `word_id` | TEXT | 単語を保存した・めくったときの `words.id`。それ以外は NULL |
+| `data` | TEXT | ActivityEvent の JSON |
+| `seq` | INTEGER | 書き込むたびに増える番号 |
+
+記録は足すだけで書き換えない。同じ id がもう入っていれば何もしない。
+テストの1問ずつの単語と答えは、`data` の `answers` に入る。
+
 ### Worker の API
 
-どちらも `Authorization: Bearer <SYNC_TOKEN>` が要る。無い・違うときは `401`。
+どれも `Authorization: Bearer <SYNC_TOKEN>` が要る。無い・違うときは `401`。
 
 | メソッド | パス | 送るもの | 返すもの |
 |---|---|---|---|
 | GET | `/api/words?since=<seq>` | — | `{ words: [Row], cursor, hasMore }`(1回 500 行まで) |
 | POST | `/api/words` | `{ words: [Row] }`(1回 200 行まで) | `{ ok: true }` |
+| GET | `/api/activity?since=<seq>` | — | `{ events: [Event], cursor, hasMore }`(1回 500 行まで) |
+| POST | `/api/activity` | `{ events: [Event] }`(1回 200 行まで) | `{ ok: true }` |
 
-`Row` は `{ id, updatedAt, deleted, data }`。
+`Row` は `{ id, updatedAt, deleted, data }`、`Event` は `{ id, kind, date, wordID, data }`。
 
 ### 手元のファイル
 
@@ -243,7 +210,8 @@ sequenceDiagram
 |---|---|
 | `words.json` | Book の単語(WordEntry の配列)。Cloudflare から取ってきた分の控えも兼ねる |
 | `sync.json` | まだ送れていない単語(`pending`)と、どこまで取ってきたか(`cursor`) |
-| `activity.json` | 学習の操作の記録(ActivityEvent の配列) |
+| `activity.json` | 学習の記録(ActivityEvent の配列)。Cloudflare から取ってきた分の控えも兼ねる |
+| `activity-sync.json` | まだ送れていない記録(`pending`)と、どこまで取ってきたか(`cursor`) |
 | `history.json` | 訳した文の一覧(HistoryItem の配列) |
 | `settings.json` | 設定(AppSettings) |
 | `images/` | 画像から訳したときの画像 |
@@ -281,6 +249,9 @@ sequenceDiagram
 | `score` | Int? | 単語テストは正解数、英作と英文訳は点数(0〜100) |
 | `total` | Int? | 単語テストの問題数 |
 | `detail` | String? | 英作と英文訳の、直した英文や模範訳 |
+| `wordID` | UUID? | 単語を保存した・めくったときの、その単語 |
+| `answer` | String? | 英作と英文訳で自分が書いた答え |
+| `answers` | [WordAnswer]? | 単語テストの1問ずつの単語・問題・答え・判定 |
 
 </details>
 

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 592" role="img" aria-label="変えた単語は手元に保存してから1秒後に Worker へ送り、続けて前回の続きから取ってきて、単語ごとに新しいほうを残す">
+<style>
+  .bg{fill:#ffffff}
+  text{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:12px;fill:#1f2328}
+  .t{font-size:13px;font-weight:600}
+  .s{fill:#59636e}
+  .xs{font-size:11px}
+  .g{font-size:12px;font-weight:600;fill:#59636e;letter-spacing:.02em}
+  .panel{fill:#f6f8fa;stroke:#d1d9e0}
+  .card{fill:#ffffff;stroke:#d1d9e0}
+  .l1{fill:#2f6bff;fill-opacity:.16;stroke:#2f6bff;stroke-opacity:.35}
+  .l2{fill:#2f6bff;fill-opacity:.10;stroke:#2f6bff;stroke-opacity:.28}
+  .l3{fill:#2f6bff;fill-opacity:.05;stroke:#2f6bff;stroke-opacity:.22}
+  .tag{fill:none;stroke:#d1d9e0}
+  .chip{fill:#ffffff;stroke:#d1d9e0}
+  .line{fill:none;stroke:#59636e;stroke-width:1.5}
+  .acc{stroke:#2f6bff}
+  .dash{stroke-dasharray:5 4}
+  .life{stroke:#d1d9e0;stroke-width:1.5;stroke-dasharray:4 4}
+  .hd{fill:#59636e}
+  .hd.acc{fill:#2f6bff}
+  .num{fill:#2f6bff}
+  .numt{fill:#ffffff;font-size:11px;font-weight:700;text-anchor:middle}
+  @media (prefers-color-scheme: dark){
+    .bg{fill:#0d1117}
+    text{fill:#e6edf3}
+    .s,.g{fill:#9198a1}
+    .panel{fill:#151b23;stroke:#3d444d}
+    .card{fill:#0d1117;stroke:#3d444d}
+    .l1,.l2,.l3{fill:#4c8dff;stroke:#4c8dff}
+    .tag{stroke:#3d444d}
+    .chip{fill:#0d1117;stroke:#3d444d}
+    .line{stroke:#9198a1}
+    .acc{stroke:#4c8dff}
+    .life{stroke:#3d444d}
+    .hd{fill:#9198a1}
+    .hd.acc,.num{fill:#4c8dff}
+    .numt{fill:#0d1117}
+  }
+</style>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd acc" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" width="960" height="592"/>
+<rect class="card" x="20" y="24" width="200" height="52" rx="10"/>
+<text x="120" y="46" class="t" text-anchor="middle">Gloss</text>
+<text x="120" y="64" class="s xs" text-anchor="middle">WordsStore</text>
+<path class="life" d="M120,76 L120,560"/>
+<rect class="card" x="260" y="24" width="200" height="52" rx="10"/>
+<text x="360" y="46" class="t" text-anchor="middle">手元のファイル</text>
+<text x="360" y="64" class="s xs" text-anchor="middle">words.json · sync.json</text>
+<path class="life" d="M360,76 L360,560"/>
+<rect class="card" x="500" y="24" width="200" height="52" rx="10"/>
+<text x="600" y="46" class="t" text-anchor="middle">Worker</text>
+<text x="600" y="64" class="s xs" text-anchor="middle">gloss-sync</text>
+<path class="life" d="M600,76 L600,560"/>
+<rect class="card" x="740" y="24" width="200" height="52" rx="10"/>
+<text x="840" y="46" class="t" text-anchor="middle">D1</text>
+<text x="840" y="64" class="s xs" text-anchor="middle">words</text>
+<path class="life" d="M840,76 L840,560"/>
+<path class="line acc" d="M126,136 L356,136" marker-end="url(#b)"/>
+<circle class="num" cx="138" cy="110" r="9"/>
+<text x="138" y="114" class="numt" text-anchor="middle">1</text>
+<text x="154" y="114">保存して pending に積む</text>
+<text x="154" y="128" class="s xs">変えた単語に updatedAt を付ける</text>
+<path class="line acc" d="M126,248 L596,248" marker-end="url(#b)"/>
+<circle class="num" cx="138" cy="222" r="9"/>
+<text x="138" y="226" class="numt" text-anchor="middle">2</text>
+<text x="154" y="226">POST /api/words</text>
+<text x="154" y="240" class="s xs">pending の単語を送る</text>
+<path class="line acc" d="M606,320 L836,320" marker-end="url(#b)"/>
+<circle class="num" cx="618" cy="294" r="9"/>
+<text x="618" y="298" class="numt" text-anchor="middle">3</text>
+<text x="634" y="298">新しい行だけ書く</text>
+<text x="634" y="312" class="s xs">updated_at で比べて seq を進める</text>
+<path class="line acc" d="M126,392 L596,392" marker-end="url(#b)"/>
+<circle class="num" cx="138" cy="366" r="9"/>
+<text x="138" y="370" class="numt" text-anchor="middle">4</text>
+<text x="154" y="370">GET /api/words?since=cursor</text>
+<text x="154" y="384" class="s xs">前回の続きから取る</text>
+<path class="line dash" d="M594,464 L124,464" marker-end="url(#a)"/>
+<circle class="num" cx="138" cy="452" r="9"/>
+<text x="138" y="456" class="numt" text-anchor="middle">5</text>
+<text x="154" y="456">cursor より後の行</text>
+<path class="line acc" d="M126,536 L356,536" marker-end="url(#b)"/>
+<circle class="num" cx="138" cy="510" r="9"/>
+<text x="138" y="514" class="numt" text-anchor="middle">6</text>
+<text x="154" y="514">新しいほうを残して保存</text>
+<text x="154" y="528" class="s xs">単語ごとに比べ、cursor を進める</text>
+<rect class="l2" x="28" y="170" width="184" height="30" rx="15"/>
+<text x="120" y="190" class="s xs" text-anchor="middle">1秒待ってまとめて送る</text>
+</svg>

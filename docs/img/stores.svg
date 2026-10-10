@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 436" role="img" aria-label="Store の依存は一方向。History が Translate に、Words が Ask と Quiz に使われ、Settings と Activity は多くの Store の土台になる">
+<style>
+  .bg{fill:#ffffff}
+  text{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:12px;fill:#1f2328}
+  .t{font-size:13px;font-weight:600}
+  .s{fill:#59636e}
+  .xs{font-size:11px}
+  .g{font-size:12px;font-weight:600;fill:#59636e;letter-spacing:.02em}
+  .panel{fill:#f6f8fa;stroke:#d1d9e0}
+  .card{fill:#ffffff;stroke:#d1d9e0}
+  .l1{fill:#2f6bff;fill-opacity:.16;stroke:#2f6bff;stroke-opacity:.35}
+  .l2{fill:#2f6bff;fill-opacity:.10;stroke:#2f6bff;stroke-opacity:.28}
+  .l3{fill:#2f6bff;fill-opacity:.05;stroke:#2f6bff;stroke-opacity:.22}
+  .tag{fill:none;stroke:#d1d9e0}
+  .chip{fill:#ffffff;stroke:#d1d9e0}
+  .line{fill:none;stroke:#59636e;stroke-width:1.5}
+  .acc{stroke:#2f6bff}
+  .dash{stroke-dasharray:5 4}
+  .life{stroke:#d1d9e0;stroke-width:1.5;stroke-dasharray:4 4}
+  .hd{fill:#59636e}
+  .hd.acc{fill:#2f6bff}
+  .num{fill:#2f6bff}
+  .numt{fill:#ffffff;font-size:11px;font-weight:700;text-anchor:middle}
+  @media (prefers-color-scheme: dark){
+    .bg{fill:#0d1117}
+    text{fill:#e6edf3}
+    .s,.g{fill:#9198a1}
+    .panel{fill:#151b23;stroke:#3d444d}
+    .card{fill:#0d1117;stroke:#3d444d}
+    .l1,.l2,.l3{fill:#4c8dff;stroke:#4c8dff}
+    .tag{stroke:#3d444d}
+    .chip{fill:#0d1117;stroke:#3d444d}
+    .line{stroke:#9198a1}
+    .acc{stroke:#4c8dff}
+    .life{stroke:#3d444d}
+    .hd{fill:#9198a1}
+    .hd.acc,.num{fill:#4c8dff}
+    .numt{fill:#0d1117}
+  }
+</style>
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd" d="M0,0 L10,5 L0,10 z"/></marker>
+  <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd acc" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" width="960" height="436"/>
+<rect class="card" x="32" y="32" width="240" height="84" rx="10"/>
+<text x="48" y="58" class="t">HistoryStore</text>
+<text x="48" y="78" class="s">訳した文の一覧</text>
+<rect class="card" x="360" y="32" width="240" height="84" rx="10"/>
+<text x="376" y="58" class="t">TranslateStore</text>
+<text x="376" y="78" class="s">原文・訳文・キャッシュ</text>
+<rect class="tag" x="376" y="88" width="68.8" height="18" rx="9"/>
+<text x="410.4" y="101" class="s xs" text-anchor="middle">Settings</text>
+<rect class="tag" x="450.8" y="88" width="68.8" height="18" rx="9"/>
+<text x="485.2" y="101" class="s xs" text-anchor="middle">Activity</text>
+<rect class="card" x="360" y="172" width="240" height="84" rx="10"/>
+<text x="376" y="198" class="t">WordsStore</text>
+<text x="376" y="218" class="s">Book の単語と同期</text>
+<rect class="tag" x="376" y="228" width="68.8" height="18" rx="9"/>
+<text x="410.4" y="241" class="s xs" text-anchor="middle">Settings</text>
+<rect class="tag" x="450.8" y="228" width="68.8" height="18" rx="9"/>
+<text x="485.2" y="241" class="s xs" text-anchor="middle">Activity</text>
+<rect class="card" x="688" y="124" width="240" height="84" rx="10"/>
+<text x="704" y="150" class="t">AskStore</text>
+<text x="704" y="170" class="s">右のパネルの質問と答え</text>
+<rect class="tag" x="704" y="180" width="68.8" height="18" rx="9"/>
+<text x="738.4" y="193" class="s xs" text-anchor="middle">Settings</text>
+<rect class="card" x="688" y="232" width="240" height="84" rx="10"/>
+<text x="704" y="258" class="t">QuizStore</text>
+<text x="704" y="278" class="s">4つのテスト</text>
+<rect class="tag" x="704" y="288" width="68.8" height="18" rx="9"/>
+<text x="738.4" y="301" class="s xs" text-anchor="middle">Settings</text>
+<rect class="tag" x="778.8" y="288" width="68.8" height="18" rx="9"/>
+<text x="813.1999999999999" y="301" class="s xs" text-anchor="middle">Activity</text>
+<path class="line acc" d="M272,74 C315.0,74 315.0,74 358,74" marker-end="url(#b)"/>
+<path class="line acc" d="M600,214 C643.0,214 643.0,166 686,166" marker-end="url(#b)"/>
+<path class="line acc" d="M600,214 C643.0,214 643.0,274 686,274" marker-end="url(#b)"/>
+<rect class="l2" x="32" y="348" width="440" height="56" rx="10"/>
+<text x="48" y="372" class="t">SettingsStore</text>
+<text x="48" y="392" class="s">エンジン・モデル・同期先など。タグの Store が使う</text>
+<rect class="l2" x="488" y="348" width="440" height="56" rx="10"/>
+<text x="504" y="372" class="t">ActivityStore</text>
+<text x="504" y="392" class="s">学習の記録。Cloudflare に同期。タグの Store が使う</text>
+</svg>
