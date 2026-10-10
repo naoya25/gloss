@@ -42,16 +42,44 @@ struct ReportPage: View {
                 .fixedSize()
             }
             ToolbarItem {
-                let report = activity.report()
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(report.markdown(), forType: .string)
-                } label: {
-                    Label("Copy as Markdown", systemImage: "doc.on.clipboard")
-                }
-                .help("Copy today's report as Markdown")
-                .disabled(report.isEmpty)
+                CopyReportMenu()
             }
+        }
+    }
+}
+
+// 押すと画像でコピーし、横の矢印から Markdown でもコピーできる。コピーできたら少しの間だけ印を変える
+private struct CopyReportMenu: View {
+    @Environment(ActivityStore.self) private var activity
+    @State private var copied = false
+
+    var body: some View {
+        let report = activity.report()
+        Menu {
+            Button("Copy as Image") { copyImage(report) }
+            Button("Copy as Markdown") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(report.markdown(), forType: .string)
+                flash()
+            }
+        } label: {
+            Label(copied ? "Copied" : "Copy Report", systemImage: copied ? "checkmark" : "doc.on.clipboard")
+        } primaryAction: {
+            copyImage(report)
+        }
+        .help("Copy today's report as an image. Use the arrow for Markdown")
+        .disabled(report.isEmpty)
+    }
+
+    private func copyImage(_ report: DayReport) {
+        if ReportShareCard.copy(report: report, streak: activity.state.events.streak(until: .now)) { flash() }
+    }
+
+    private func flash() {
+        copied = true
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            copied = false
         }
     }
 }
