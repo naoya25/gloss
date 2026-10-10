@@ -13,9 +13,11 @@ interface Quiz {
   error: string | null;
   // Book と記録に入れたか。二重に入れないため
   recorded: boolean;
+  // テストを始めるたびに増える番号。画面ではこれで1枚ごと作り直す
+  round: number;
 }
 
-const emptyQuiz = (): Quiz => ({ questions: [], answers: {}, grades: {}, grading: false, error: null, recorded: false });
+const emptyQuiz = (round = 0): Quiz => ({ questions: [], answers: {}, grades: {}, grading: false, error: null, recorded: false, round });
 
 interface TestState {
   direction: Direction;
@@ -86,9 +88,10 @@ export const useTest = create<TestState>()((setState, getState) => {
       const questions = onlyMissed
         ? quiz.questions.filter((word) => quiz.grades[word.id]?.verdict !== Mastery.Known).map((word) => words.find((w) => w.id === word.id) ?? word)
         : pickQuestions(words, undefined, new Set(quiz.questions.map((word) => word.id)));
-      update(() => ({ ...emptyQuiz(), questions }));
-      // 結果を見ていた一番下のままだと、新しいテストになったことが分からないので、上に戻す
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      update((previous) => ({ ...emptyQuiz(previous.round + 1), questions }));
+      // 結果を見ていた一番下のままだと、新しいテストになったことが分からないので、上に戻す。
+      // iPhone の Safari では、滑らかに動かすと描き直しが遅れることがあるので、新しい画面ができてから一気に戻す
+      requestAnimationFrame(() => window.scrollTo(0, 0));
     },
     setAnswer: (id, answer) => update((quiz) => ({ ...quiz, answers: { ...quiz.answers, [id]: answer } })),
     // 答えと同じものはその場で正解にして、残りだけ Worker 経由で AI に採点してもらう

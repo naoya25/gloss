@@ -43,6 +43,7 @@ export function TestPage() {
         </div>
       )}
       <form
+        key={quiz.round}
         className="sheet"
         onSubmit={(event) => {
           event.preventDefault();

@@ -113,7 +113,8 @@ button:disabled { opacity: 0.6; }
 .chart .bar.empty { fill: var(--line); }
 .chart .line { stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; }
 
-.tabs { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: center; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+/* 下のタブはぼかしを使わず塗りつぶす。iPhone の Safari で、ぼかしの下の描き直しが遅れることがあるため */
+.tabs { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: center; background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
 .tabs button { flex: 1; max-width: 200px; border: 0; background: transparent; display: grid; justify-items: center; gap: 2px; padding: 8px 0; min-height: 56px; font-size: 11px; color: var(--sub); }
 .tabs button[aria-current="page"] { color: var(--accent); font-weight: 600; }
 .tabs svg { width: 24px; height: 24px; }
