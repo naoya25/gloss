@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" role="img" aria-label="Gloss は Pages・Stores・GlossCore の3層で、GlossCore が AI と Cloudflare の Worker に話しかけ、手元の JSON と Keychain に保存する">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 520" role="img" aria-label="Mac の Gloss とスマホの Web アプリは、どちらも合言葉付きで Cloudflare の Worker を呼び、D1 の単語帳と記録を共有する。スマホの採点は Worker が代わりに AI を呼ぶ">
 <style>
   .bg{fill:#ffffff}
   text{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:12px;fill:#1f2328}
@@ -42,7 +42,7 @@
   <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd" d="M0,0 L10,5 L0,10 z"/></marker>
   <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="hd acc" d="M0,0 L10,5 L0,10 z"/></marker>
 </defs>
-<rect class="bg" width="960" height="520"/>
+<rect class="bg" width="1280" height="520"/>
 <text x="32" y="40" class="g">Gloss.app(macOS)</text>
 <rect class="panel" x="32" y="52" width="480" height="436" rx="14"/>
 <rect class="l1" x="56" y="84" width="432" height="72" rx="10"/>
@@ -83,4 +83,16 @@
 <rect class="chip" x="513.0" y="199" width="132" height="44" rx="8"/><text x="579" y="218" text-anchor="middle">翻訳・解説・採点</text><text x="579" y="234" class="s xs" text-anchor="middle">SSE で受け取る</text>
 <path class="line acc" d="M488,348 C591.0,348 591.0,350 694,350" marker-end="url(#b)"/>
 <rect class="chip" x="525.0" y="327" width="132" height="44" rx="8"/><text x="591" y="346" text-anchor="middle">単語帳と記録の同期</text><text x="591" y="362" class="s xs" text-anchor="middle">Bearer トークン</text>
+<text x="1040" y="284" class="g">スマホ(ブラウザ)</text>
+<rect class="panel" x="1040" y="296" width="208" height="192" rx="14"/>
+<rect class="card" x="1056" y="320" width="176" height="60" rx="10"/>
+<text x="1072" y="346" class="t">Web アプリ</text>
+<text x="1072" y="366" class="s">Book · Test · Report</text>
+<path class="card" d="M1056,408 a88.0,8 0 0 0 176,0 v56 a88.0,8 0 0 1 -176,0 z"/><ellipse class="card" cx="1144.0" cy="408" rx="88.0" ry="8"/><text x="1072" y="434" class="t">IndexedDB</text><text x="1072" y="454" class="s">電波が無いときの控え</text>
+<path class="line acc" d="M1054,344 L906,344" marker-end="url(#b)"/>
+<path class="line" d="M906,360 L1054,360" marker-end="url(#a)"/>
+<text x="980" y="334" class="s xs" text-anchor="middle">合言葉付きで呼ぶ</text>
+<text x="980" y="378" class="s xs" text-anchor="middle">ページを配る</text>
+<path class="line acc" d="M860,320 L860,236" marker-end="url(#b)"/>
+<text x="870" y="272" class="s xs">スマホの採点</text>
 </svg>

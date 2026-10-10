@@ -90,6 +90,44 @@ Book の語数のグラフは、単語を追加した日から数えるので過
 単語テストで答えが Book と完全に同じでないときは、Worker が JAPAN AI に採点させる。AI に届かなかった問題は、正解を見て自分で ✓ / ? / ✕ を付ける。
 設計は [docs/web-design.md](docs/web-design.md)。
 
+## 仕組み
+
+![Mac の Gloss とスマホの Web アプリは、どちらも合言葉付きで Cloudflare の Worker を呼び、D1 の単語帳と記録を共有する。スマホの採点は Worker が代わりに AI を呼ぶ](docs/img/architecture.svg)
+
+### スマホは、Cloudflare の Worker が配るページを開いている
+
+`cloud/` の Worker は、2つの仕事をしている。
+
+| 来たリクエスト | Worker がすること |
+|---|---|
+| `/api/` で始まらないもの(ページ) | `web/dist` にビルドした Web アプリのファイルを、そのまま返す。中身は画面の部品だけで、単語帳も記録も入っていない |
+| `/api/` で始まるもの(データ) | 合言葉を確かめてから、D1 の単語帳と記録を読み書きする。スマホの単語テストの採点では、代わりに JAPAN AI を呼ぶ |
+
+スマホのブラウザは、このページを開いて、ページの中から `/api/` を呼んでいる。ホーム画面に追加すると、アプリのように開ける。
+
+### データは、合言葉を知っている端末だけが読み書きできる
+
+- ページのファイルは、URL を知っていれば誰でも読み込める。でも中身は空の画面だけで、データは入っていない
+- データ(`/api/`)は、`Authorization: Bearer <合言葉>` が付いていないと全部 `401` で断る。合言葉は Worker の secret `SYNC_TOKEN` にだけ置いてあり、コードにも git にも入っていない
+- 合言葉の置き場所は、Mac では Keychain(`gloss-sync`)、スマホではブラウザの中(localStorage)
+- スマホへの渡し方は QR コード。Mac の設定の「Show QR Code」は、URL の `#` の後ろに合言葉を付けた QR を出す。ブラウザは `#` の後ろをサーバーに送らないので、合言葉が通信の記録に残らない
+- ページは、自分のアドレス以外からスクリプトを読み込めないようにしている(Content-Security-Policy)。よそのスクリプトに合言葉を盗まれないため
+- JAPAN AI のキーは Worker の secret(`AI_KEY`)にだけ置き、スマホには渡さない。スマホから送れるのは単語テストの問題と答えだけで、採点の指示文は Worker の中で組み立てる。合言葉が漏れても、採点以外に AI を使われない
+
+> [!IMPORTANT]
+> 合言葉が漏れると、単語帳の読み書きと採点ができてしまう。漏れたら、新しい合言葉を `npx wrangler secret put SYNC_TOKEN` で入れ直し、Mac の設定とスマホにも入れ直す。古い合言葉はその時点で使えなくなる。
+
+### Mac とスマホは、D1 を正にしてそろえている
+
+単語帳(`words` テーブル)と学習の記録(`activity` テーブル)は、Cloudflare D1 にあるものを正とする。Mac もスマホも、手元には控えを置いているだけ。
+
+1. 単語をめくる・テストで ✓ を付けるなど、手元で変えたら、まず控え(Mac は JSON ファイル、スマホは IndexedDB)に保存して、「まだ送っていない」に積む
+2. 1秒待ってから、まとめて Worker に送る(`POST /api/words`・`POST /api/activity`)
+3. 続けて、前回の続きから、ほかの端末が書いた分を取ってくる(`GET ...?since=<前回の番号>`)
+4. 単語は、同じ単語を両方で変えていたら、後から変えたほうを残す。記録は書き換えないので、まだ持っていないものを足すだけ
+
+Mac は、Gloss に戻ってきたときにも取ってくる。スマホは、画面に戻ってきたときと、電波が戻ったときに取ってくる。電波が無い間の変更は「まだ送っていない」に残り、次に送る。
+
 ## キーボードショートカット
 
 | キー | 動き |
@@ -148,13 +186,12 @@ swift test               # GlossCore のテスト
 Xcode 26 / Swift 6.3 で確認している。
 カードの文字が1文字ずつ入れ替わる動きは macOS 15 以上で、macOS 14 ではふわっと切り替わる。
 
-## アーキテクチャ
+## アーキテクチャ(Mac アプリの中)
 
 画面ごとに、見た目(Page)と状態(Store)を同じフォルダに置いている。
 Store は `private(set)` の state を1つ持ち、書き換えは Store のメソッドからだけにしている。
 UI に依存しない処理(モデル・プロンプト・採点の読み取り・同期のマージ)は GlossCore に置き、テストしている。
-
-![Gloss は Pages・Stores・GlossCore の3層で、GlossCore が AI と Cloudflare の Worker に話しかけ、手元の JSON と Keychain に保存する](docs/img/architecture.svg)
+スマホの Web アプリ(`web/`)も同じ分け方で、`pages/`(見た目と状態)と `core/`(同期・採点・集計。テストあり)に分けている。
 
 ### Store どうしの依存
 
@@ -221,6 +258,7 @@ SQL のテーブルは Cloudflare D1 の `words`(Book の単語)と `activity`(�
 | POST | `/api/words` | `{ words: [Row] }`(1回 200 行まで) | `{ ok: true }` |
 | GET | `/api/activity?since=<seq>` | — | `{ events: [Event], cursor, hasMore }`(1回 500 行まで) |
 | POST | `/api/activity` | `{ events: [Event] }`(1回 200 行まで) | `{ ok: true }` |
+| POST | `/api/ai/word-test` | `{ direction, items: [{ number, prompt, expected, answer }] }`(1回 10 問まで) | `{ grades: { "<number>": { verdict, comment } } }`。`verdict` は 0 = Not Yet / 1 = Unsure / 2 = Known |
 
 `Row` は `{ id, updatedAt, deleted, data }`、`Event` は `{ id, kind, date, wordID, data }`。
 
