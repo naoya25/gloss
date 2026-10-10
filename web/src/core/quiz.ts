@@ -3,9 +3,12 @@ import { millis } from "./ids";
 
 export const QUESTION_COUNT = 10;
 
-// 覚えていない単語と、しばらく見ていない単語から先に出す(Mac の WordQuiz.pick と同じ)
-export function pickQuestions(words: WordEntry[], count = QUESTION_COUNT): WordEntry[] {
-  const ordered = words.filter(hasCardPair).sort((a, b) => {
+// 覚えていない単語と、しばらく見ていない単語から先に出す(Mac の WordQuiz.pick と同じ)。
+// 直前のテストに出した単語は、ほかに出せる単語が足りないときだけ混ぜる
+export function pickQuestions(words: WordEntry[], count = QUESTION_COUNT, recent: Set<string> = new Set()): WordEntry[] {
+  const candidates = words.filter(hasCardPair);
+  const fresh = candidates.filter((word) => !recent.has(word.id));
+  const ordered = (fresh.length >= count ? fresh : candidates).sort((a, b) => {
     const mastery = (a.mastery ?? 0) - (b.mastery ?? 0);
     return mastery !== 0 ? mastery : millis(a.lastReviewed) - millis(b.lastReviewed);
   });

@@ -85,8 +85,10 @@ export const useTest = create<TestState>()((setState, getState) => {
       const words = useWords.getState().words;
       const questions = onlyMissed
         ? quiz.questions.filter((word) => quiz.grades[word.id]?.verdict !== Mastery.Known).map((word) => words.find((w) => w.id === word.id) ?? word)
-        : pickQuestions(words);
+        : pickQuestions(words, undefined, new Set(quiz.questions.map((word) => word.id)));
       update(() => ({ ...emptyQuiz(), questions }));
+      // 結果を見ていた一番下のままだと、新しいテストになったことが分からないので、上に戻す
+      window.scrollTo({ top: 0, behavior: "smooth" });
     },
     setAnswer: (id, answer) => update((quiz) => ({ ...quiz, answers: { ...quiz.answers, [id]: answer } })),
     // 答えと同じものはその場で正解にして、残りだけ Worker 経由で AI に採点してもらう

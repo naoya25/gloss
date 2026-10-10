@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isoSeconds, newID } from "./ids";
 import { Mastery, type ActivityEvent, type WordEntry } from "./models";
-import { isExactAnswer } from "./quiz";
+import { isExactAnswer, pickQuestions } from "./quiz";
 import { bookSize, lastDays, quizTotals, streak } from "./report";
 import { activityRow, didPushWords, mergeActivity, mergeWords, wordRows } from "./sync";
 
@@ -89,5 +89,20 @@ describe("report", () => {
   it("stacks the book size by the day words were added", () => {
     const words = [word({ date: at(5) }), word({ date: at(1) })];
     expect(bookSize(words, lastDays(3, today))).toEqual([1, 2, 2]);
+  });
+});
+
+describe("pickQuestions", () => {
+  it("avoids the words from the last test when there are enough others", () => {
+    const words = Array.from({ length: 25 }, (_, i) => word({ term: `w${i}` }));
+    const first = pickQuestions(words);
+    const next = pickQuestions(words, 10, new Set(first.map((w) => w.id)));
+    expect(next).toHaveLength(10);
+    expect(next.some((w) => first.includes(w))).toBe(false);
+  });
+  it("reuses recent words only when there are not enough others", () => {
+    const words = Array.from({ length: 12 }, (_, i) => word({ term: `w${i}` }));
+    const recent = new Set(words.slice(0, 10).map((w) => w.id));
+    expect(pickQuestions(words, 10, recent)).toHaveLength(10);
   });
 });
