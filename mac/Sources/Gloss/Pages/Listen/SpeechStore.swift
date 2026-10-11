@@ -5,6 +5,8 @@ import Observation
 struct SpeechState {
     // 読み上げている単語。カードのボタンと Listen の両方で使う
     var speakingWordID: UUID?
+    // テストの英文など、単語以外で読み上げている文
+    var speakingText: String?
     var isListening = false
 }
 
@@ -20,6 +22,15 @@ final class SpeechStore {
     func speak(_ word: WordEntry) {
         stop()
         task = Task { await read(word) }
+    }
+
+    func speak(_ text: String) {
+        stop()
+        state.speakingText = text
+        task = Task {
+            await say(text)
+            if !Task.isCancelled { state.speakingText = nil }
+        }
     }
 
     func listen(_ words: [WordEntry]) {
@@ -44,6 +55,7 @@ final class SpeechStore {
 
     private func finish() {
         state.speakingWordID = nil
+        state.speakingText = nil
         state.isListening = false
     }
 

@@ -422,13 +422,20 @@ private struct WritingTaskCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if !task.scene.isEmpty {
-                Text(task.scene)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                    .foregroundStyle(Color.accentColor)
+            HStack {
+                if !task.scene.isEmpty {
+                    Text(task.scene)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                        .foregroundStyle(Color.accentColor)
+                }
+                Spacer()
+                // 英文訳テストは、読む前に聞き取りの練習にも使える
+                if kind == .reading {
+                    SpeakTextButton(text: task.task)
+                }
             }
             if kind == .reading && isGraded {
                 GlossTextView(
@@ -524,7 +531,13 @@ private struct WritingGradeView: View {
                     .help("Ask about this review in the side panel")
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(kind == .writing ? "Natural English" : "Model Translation").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text(kind == .writing ? "Natural English" : "Model Translation").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    if kind == .writing {
+                        SpeakTextButton(text: grade.corrected)
+                    }
+                }
                 if kind == .writing {
                     GlossTextView(
                         text: .constant(grade.corrected),
@@ -634,5 +647,24 @@ extension AskStore {
                 grade: grade
             )
         }
+    }
+}
+
+// 英文を Samantha の声で読み上げる。読んでいる間に押すと止まる
+struct SpeakTextButton: View {
+    @Environment(SpeechStore.self) private var speech
+    let text: String
+
+    var body: some View {
+        let isSpeaking = speech.state.speakingText == text
+        Button {
+            isSpeaking ? speech.stop() : speech.speak(text)
+        } label: {
+            Label(isSpeaking ? "Stop" : "Listen", systemImage: isSpeaking ? "speaker.wave.2.fill" : "speaker.wave.2")
+                .foregroundStyle(isSpeaking ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+        }
+        .buttonStyle(.borderless)
+        .keyboardShortcut("l", modifiers: [.command, .option])
+        .help(isSpeaking ? "Stop" : "Listen to the English (⌥⌘L)")
     }
 }
