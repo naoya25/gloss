@@ -54,6 +54,18 @@ final class WordsStore {
         return state.words.first { $0.key == key }
     }
 
+    // ✓ を付けた表現を英語の表記で返す。日本語で保存した単語はカードの英語を使う
+    var knownTerms: [String] { englishTerms { $0 == .known } }
+
+    // ✕ と ? の表現。まだ覚えていないので、訳の中に英語のまま残さない
+    var learningTerms: [String] { englishTerms { $0 != .known } }
+
+    private func englishTerms(where matches: (Mastery) -> Bool) -> [String] {
+        state.words.filter { matches($0.masteryLevel) }.compactMap { entry in
+            MixedTranslation.containsJapanese(entry.term) ? entry.english : entry.term
+        }
+    }
+
     func didOpen() {
         state.openCardID = nil
         refreshCardOrder()

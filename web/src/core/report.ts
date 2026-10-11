@@ -20,6 +20,24 @@ export function quizTotals(events: ActivityEvent[]) {
   };
 }
 
+// 点は Mac と同じ数え方。記録に点があればそれを使い、単語テストは1問正解で10点
+export const POINTS_PER_CORRECT_ANSWER = 10;
+
+export function pointsOf(event: ActivityEvent): number {
+  if (event.points !== undefined) return event.points;
+  if (event.kind === "wordQuiz" || event.kind === "meaningQuiz") return (event.score ?? 0) * POINTS_PER_CORRECT_ANSWER;
+  return 0;
+}
+
+export const totalPoints = (events: ActivityEvent[]) => events.reduce((sum, event) => sum + pointsOf(event), 0);
+
+// 覚えた表現を英語のまま残した訳で、英語の文字の割合。score が英語の文字数、total が訳の文字数
+export function englishRate(events: ActivityEvent[]): number | null {
+  const reads = events.filter((event) => event.kind === "glossRead");
+  const total = reads.reduce((sum, event) => sum + (event.total ?? 0), 0);
+  return total ? Math.round((reads.reduce((sum, event) => sum + (event.score ?? 0), 0) * 100) / total) : null;
+}
+
 export function averageScore(events: ActivityEvent[], kind: ActivityKind): number | null {
   const scores = events.filter((event) => event.kind === kind && event.score !== undefined).map((event) => event.score!);
   return scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;

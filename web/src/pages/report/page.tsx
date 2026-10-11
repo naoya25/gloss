@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { activityLabel } from "../../core/models";
-import { averageScore, bookSize, countKind, dailyCounts, eventsOn, lastDays, quizTotals, streak } from "../../core/report";
+import { averageScore, bookSize, countKind, dailyCounts, eventsOn, lastDays, pointsOf, quizTotals, streak, totalPoints, englishRate } from "../../core/report";
 import { reportImage, reportMarkdown, type ReportSummary } from "../../core/reportCard";
 import { useActivity } from "../../stores/activity";
 import { useWords } from "../../stores/words";
@@ -34,7 +34,10 @@ function Today() {
   const writing = averageScore(today, "writing");
   const reading = averageScore(today, "reading");
   const days = streak(events);
+  const english = englishRate(today);
   const tiles: [string, string, string?][] = [
+    ["Points", `${totalPoints(today)} pt`, `${totalPoints(events)} in total`],
+    ["English in Translations", english === null ? "–" : `${english}%`],
     ["Translations", `${countKind(today, "translated")}`],
     ["Words Saved", `${countKind(today, "wordSaved")}`, `${words.length} in your Book`],
     ["Cards Flipped", `${countKind(today, "cardFlipped")}`],
@@ -67,7 +70,7 @@ function Today() {
               <time>{new Date(event.date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}</time>
               <span className="kind">{activityLabel[event.kind]}</span>
               <span className="title">{event.title}</span>
-              {event.total ? <b>{event.score}/{event.total}</b> : event.score !== undefined ? <b>{event.score} pts</b> : null}
+              {event.kind === "glossRead" ? <b>+{pointsOf(event)} pt</b> : event.total ? <b>{event.score}/{event.total}</b> : event.score !== undefined ? <b>{event.score} pts</b> : null}
             </li>
           ))}
         </ul>

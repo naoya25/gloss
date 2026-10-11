@@ -10,7 +10,7 @@ struct ReportToday: View {
         let report = activity.report()
         VStack(alignment: .leading, spacing: 24) {
             TodayHeader(report: report, streak: activity.state.events.streak(until: .now))
-            StatGrid(report: report, totalWords: words.state.words.count)
+            StatGrid(report: report, totalWords: words.state.words.count, totalPoints: Points.total(activity.state.events))
             if report.isEmpty {
                 ContentUnavailableView(
                     "Nothing yet today",
@@ -46,9 +46,18 @@ private struct TodayHeader: View {
 private struct StatGrid: View {
     let report: DayReport
     let totalWords: Int
+    let totalPoints: Int
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+            StatTile(value: "\(report.points)", unit: "pt", label: "Points", caption: "\(totalPoints) in total", symbol: "star")
+            StatTile(
+                value: report.englishRate.map(String.init) ?? "–",
+                unit: report.englishRate == nil ? "" : "%",
+                label: "English in Translations",
+                caption: report.englishRate == nil ? nil : "words you know, left in English",
+                symbol: "textformat.abc"
+            )
             StatTile(value: "\(report.count(.translated))", unit: "", label: "Translations", symbol: "character.bubble")
             StatTile(value: "\(report.count(.wordSaved))", unit: "", label: "Words Saved", caption: "\(totalWords) in your Book", symbol: "bookmark")
             StatTile(value: "\(report.count(.cardFlipped))", unit: "", label: "Cards Flipped", symbol: "rectangle.on.rectangle")
@@ -149,6 +158,7 @@ extension ActivityKind {
         case .meaningQuiz: "character.book.closed"
         case .writing: "pencil.and.list.clipboard"
         case .reading: "text.magnifyingglass"
+        case .glossRead: "textformat.abc"
         }
     }
 }
@@ -158,6 +168,7 @@ extension ActivityEvent {
         switch kind {
         case .wordQuiz, .meaningQuiz: score.flatMap { s in total.map { "\(s) / \($0)" } }
         case .writing, .reading: score.map { "\($0) pts" }
+        case .glossRead: "+\(Points.of(self)) pt"
         default: nil
         }
     }

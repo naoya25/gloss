@@ -30,7 +30,7 @@ export interface WordEntry {
   [key: string]: unknown;
 }
 
-export type ActivityKind = "translated" | "wordSaved" | "cardFlipped" | "wordQuiz" | "meaningQuiz" | "writing" | "reading";
+export type ActivityKind = "translated" | "wordSaved" | "cardFlipped" | "wordQuiz" | "meaningQuiz" | "writing" | "reading" | "glossRead";
 
 export const activityLabel: Record<ActivityKind, string> = {
   translated: "Translated",
@@ -40,6 +40,7 @@ export const activityLabel: Record<ActivityKind, string> = {
   meaningQuiz: "Meaning Test",
   writing: "Writing Test",
   reading: "Reading Test",
+  glossRead: "Read in English",
 };
 
 export interface WordAnswer {
@@ -60,6 +61,7 @@ export interface ActivityEvent {
   wordID?: string;
   answer?: string;
   answers?: WordAnswer[];
+  points?: number;
 }
 
 export type Direction = "toEnglish" | "toJapanese";

@@ -395,3 +395,45 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     #expect(merged.flips == 5 && merged.mastery == .known && merged.note == "立ち寄る" && merged.context == "Feel free to stop by.")
     #expect(result.removedIDs == [dup.id] && result.changedIDs == [old.id])
 }
+
+@Test func mixedTranslationKeepsOnlyKnownTermsInEnglish() {
+    let raw = "⟦FYI | ご参考までに⟧、⟦hotfix | 緊急修正⟧を出しました。⟦rollback | 切り戻し⟧の計画を見て⟦ASA"
+    let mixed = MixedTranslation.parse(raw, knownTerms: ["FYI", "Hotfix"])
+    // rollback は残す語に入っていないので日本語に戻す。書きかけの「⟦ASA」は出さない
+    #expect(mixed.text == "FYI、hotfix を出しました。切り戻しの計画を見て")
+    #expect(mixed.japanese == "ご参考までに、緊急修正を出しました。切り戻しの計画を見て")
+    #expect(mixed.keptTerms == ["FYI", "Hotfix"])
+    #expect((mixed.text as NSString).substring(with: mixed.kept[1].range) == "hotfix")
+    #expect(mixed.englishCharacters == 9)
+    #expect(mixed.points(excluding: []) == 20)
+    #expect(mixed.points(excluding: ["fyi"]) == 10)
+    #expect(MixedTranslation.parse("金曜は⟦OOO | 休暇⟧です", knownTerms: ["OOO"]).text == "金曜は OOO です")
+    // Book に無い語は、AI が足したやさしい語として残し、5点にする
+    let tried = MixedTranslation.parse("⟦useful | 便利な⟧なスキルです。⟦pstack | 道具⟧", knownTerms: [], triedTerms: ["useful"])
+    #expect(tried.text == "useful なスキルです。道具")
+    #expect(tried.triedTerms == ["useful"])
+    #expect(MixedTranslation.parse("⟦missing | 欠けた⟧⟦records | 記録⟧", knownTerms: [], triedTerms: ["missing", "records"]).text == "missing records")
+    #expect(tried.points(excluding: []) == 5)
+    // 英文に無い語は残さない
+    #expect(MixedTranslation.parse("⟦Hi | こんにちは⟧、ありがとう", knownTerms: ["Hi"], source: "Thanks for this").text == "こんにちは、ありがとう")
+}
+
+@Test func easyWordsMustBeInTheSourceAndNotBeingLearned() {
+    let words = MixedTranslation.parseEasyWords("- useful\nengineer\nmeeting\nstyle\nUseful", source: "a useful tool by an engineer with style", excluding: ["Style"])
+    #expect(words == ["useful", "engineer"])
+}
+
+@Test func englishDetectionIgnoresJapanese() {
+    #expect(MixedTranslation.isEnglish("Could you take a look at this PR?"))
+    #expect(!MixedTranslation.isEnglish("この PR を見てもらえますか?"))
+    #expect(!MixedTranslation.isEnglish("OK"))
+}
+
+@Test func pointsUseRecordedPointsOrTenPerCorrectAnswer() {
+    let events = [
+        ActivityEvent(kind: .glossRead, title: "a", score: 9, total: 40, points: 30),
+        ActivityEvent(kind: .wordQuiz, title: "b", score: 7, total: 10),
+        ActivityEvent(kind: .translated, title: "c"),
+    ]
+    #expect(Points.total(events) == 100)
+}

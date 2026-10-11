@@ -26,8 +26,18 @@ struct ReportProgress: View {
             ChartCard(title: "Daily Activity", isEmpty: events.isEmpty, emptyText: "Your daily activity will show up here.") {
                 ActivityChart(data: ProgressSeries.activity(events, days: days, until: .now))
             }
+            HStack(alignment: .top, spacing: 16) {
+                let english = ProgressSeries.englishRate(events, days: days, until: .now)
+                ChartCard(title: "English in Translations", isEmpty: english.isEmpty, emptyText: "Translate English and choose “Read It As Is” to see this grow.") {
+                    ScoreChart(data: english, unit: "%", tint: ActivityKind.glossRead.tint)
+                }
+                let points = ProgressSeries.points(events, days: days, until: .now)
+                ChartCard(title: "Points", isEmpty: Points.total(events) == 0, emptyText: "Earn points by reading learned words in English and by passing Word Tests.") {
+                    GrowthChart(data: points, unit: "pt")
+                }
+            }
             ChartCard(title: "Book Size", isEmpty: words.state.words.isEmpty, emptyText: "Save words to watch your Book grow.") {
-                BookSizeChart(data: ProgressSeries.bookSize(words.state.words, days: days, until: .now))
+                GrowthChart(data: ProgressSeries.bookSize(words.state.words, days: days, until: .now), unit: "Words")
             }
             HStack(alignment: .top, spacing: 16) {
                 let accuracy = ProgressSeries.quizAccuracy(events, days: days, until: .now)
@@ -57,6 +67,7 @@ private struct Totals: View {
             Total(value: events.streak(until: .now), label: "Current Streak")
             Total(value: ProgressSeries.longestStreak(events), label: "Longest Streak")
             Total(value: words.count, label: "Words in Book")
+            Total(value: Points.total(events), label: "Points")
         }
     }
 }
@@ -115,15 +126,16 @@ private struct ActivityChart: View {
     }
 }
 
-private struct BookSizeChart: View {
+private struct GrowthChart: View {
     let data: [DailyValue]
+    let unit: String
 
     var body: some View {
         Chart(data, id: \.day) { item in
-            AreaMark(x: .value("Day", item.day, unit: .day), y: .value("Words", item.value))
+            AreaMark(x: .value("Day", item.day, unit: .day), y: .value(unit, item.value))
                 .foregroundStyle(LinearGradient(colors: [Color.accentColor.opacity(0.35), Color.accentColor.opacity(0.02)], startPoint: .top, endPoint: .bottom))
                 .interpolationMethod(.monotone)
-            LineMark(x: .value("Day", item.day, unit: .day), y: .value("Words", item.value))
+            LineMark(x: .value("Day", item.day, unit: .day), y: .value(unit, item.value))
                 .foregroundStyle(Color.accentColor)
                 .interpolationMethod(.monotone)
         }
@@ -198,6 +210,7 @@ extension ActivityKind {
         case .meaningQuiz: .mint
         case .writing: .purple
         case .reading: .pink
+        case .glossRead: .orange
         }
     }
 }

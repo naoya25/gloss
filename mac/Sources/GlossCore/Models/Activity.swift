@@ -10,6 +10,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     case meaningQuiz
     case writing
     case reading
+    case glossRead
 
     public var label: String {
         switch self {
@@ -20,6 +21,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .meaningQuiz: "Meaning Test"
         case .writing: "Writing Test"
         case .reading: "Reading Test"
+        case .glossRead: "Read in English"
         }
     }
 }
@@ -55,11 +57,14 @@ public struct ActivityEvent: Codable, Identifiable, Hashable, Sendable {
     public var answer: String?
     // 単語テストの1問ずつの答えと判定
     public var answers: [WordAnswer]?
+    // もらった点。無ければ種類ごとの数え方で数える(Points)
+    public var points: Int?
 
     public init(
         kind: ActivityKind, title: String, score: Int? = nil, total: Int? = nil, detail: String? = nil,
-        wordID: UUID? = nil, answer: String? = nil, answers: [WordAnswer]? = nil, date: Date = Date()
+        wordID: UUID? = nil, answer: String? = nil, answers: [WordAnswer]? = nil, points: Int? = nil, date: Date = Date()
     ) {
+        self.points = points
         self.kind = kind
         self.title = title
         self.score = score
@@ -91,6 +96,13 @@ public struct DayReport: Equatable, Sendable {
     public var quizCorrect: Int { events.filter { ActivityKind.wordTests.contains($0.kind) }.compactMap(\.score).reduce(0, +) }
     public var quizTotal: Int { events.filter { ActivityKind.wordTests.contains($0.kind) }.compactMap(\.total).reduce(0, +) }
 
+    public var points: Int { Points.total(events) }
+
+    // 覚えた表現を残して訳した英文の、訳の中の英語の文字数と、訳の文字数
+    public var englishCharacters: Int { events.filter { $0.kind == .glossRead }.compactMap(\.score).reduce(0, +) }
+    public var translatedCharacters: Int { events.filter { $0.kind == .glossRead }.compactMap(\.total).reduce(0, +) }
+    public var englishRate: Int? { translatedCharacters == 0 ? nil : englishCharacters * 100 / translatedCharacters }
+
     public var writingAverage: Int? { average(.writing) }
     public var readingAverage: Int? { average(.reading) }
 
@@ -104,7 +116,9 @@ public struct DayReport: Equatable, Sendable {
 
     public func markdown(calendar: Calendar = .current) -> String {
         var lines = ["# Study Report: \(day.formatted(.dateTime.year().month().day().weekday()))", ""]
+        lines.append("- Points: \(points)")
         lines.append("- Translations: \(count(.translated))")
+        if let englishRate { lines.append("- English in translations: \(englishRate)% (\(count(.glossRead)) texts)") }
         lines.append("- Words saved: \(count(.wordSaved))")
         lines.append("- Cards flipped: \(count(.cardFlipped))")
         if quizTotal > 0 { lines.append("- Word Test: \(quizCorrect) / \(quizTotal) correct") }

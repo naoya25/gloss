@@ -65,6 +65,8 @@ final class GlossScrollView: NSScrollView {
 
 struct GlossTextView: NSViewRepresentable {
     @Binding var text: String
+    // 読むだけの欄で、文字に飾りを付けて出すとき。text より優先する
+    var attributedText: NSAttributedString?
     var isEditable = true
     var onSelect: (String) -> Void = { _ in }
     var onImage: ((Data) -> Void)?
@@ -107,6 +109,14 @@ struct GlossTextView: NSViewRepresentable {
         textView.onImage = onImage
         textView.onPasteText = onPasteText
         textView.onMouseSelect = onMouseSelect
+        if let attributedText {
+            if context.coordinator.shownAttributed != attributedText {
+                context.coordinator.shownAttributed = attributedText
+                textView.textStorage?.setAttributedString(attributedText)
+            }
+            return
+        }
+        context.coordinator.shownAttributed = nil
         // 日本語入力で変換中の文字は、まだ text に入っていない。ここで書き戻すと変換が消えて打てなくなる
         if !textView.hasMarkedText(), textView.string != text {
             textView.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: Self.attributes))
@@ -125,13 +135,14 @@ struct GlossTextView: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: GlossTextView
+        var shownAttributed: NSAttributedString?
 
         init(_ parent: GlossTextView) {
             self.parent = parent
         }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
+            guard let textView = notification.object as? NSTextView, parent.attributedText == nil else { return }
             parent.text = textView.string
         }
 

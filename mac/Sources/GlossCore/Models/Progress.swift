@@ -78,6 +78,26 @@ public enum ProgressSeries {
         }
     }
 
+    // 覚えた表現を残して訳した英文で、訳の中の英語の割合。上がっていけば、訳が要らなくなってきている
+    public static func englishRate(_ events: [ActivityEvent], days count: Int, until day: Date, calendar: Calendar = .current) -> [DailyValue] {
+        dailyAggregate(events.filter { $0.kind == .glossRead }, days: count, until: day, calendar: calendar) { dayEvents in
+            let total = dayEvents.compactMap(\.total).reduce(0, +)
+            guard total > 0 else { return nil }
+            return Double(dayEvents.compactMap(\.score).reduce(0, +)) * 100 / Double(total)
+        }
+    }
+
+    // その日までに貯めた点
+    public static func points(_ events: [ActivityEvent], days count: Int, until day: Date, calendar: Calendar = .current) -> [DailyValue] {
+        let byDay = Dictionary(grouping: events) { calendar.startOfDay(for: $0.date) }.mapValues(Points.total)
+        let days = dayList(count, until: day, calendar: calendar)
+        var running = Double(events.filter { $0.date < days[0] }.map(Points.of).reduce(0, +))
+        return days.map { date in
+            running += Double(byDay[date] ?? 0)
+            return DailyValue(day: date, value: running)
+        }
+    }
+
     public static func averageScore(_ events: [ActivityEvent], kind: ActivityKind, days count: Int, until day: Date, calendar: Calendar = .current) -> [DailyValue] {
         dailyAggregate(events.filter { $0.kind == kind }, days: count, until: day, calendar: calendar) { dayEvents in
             let scores = dayEvents.compactMap(\.score)

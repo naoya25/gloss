@@ -81,6 +81,36 @@ public enum Prompts {
         """
     }
 
+    // 英文を和訳させ、指定した表現だけを英語のまま残させる。残した表現には和訳も添えさせ、全文の和訳も作れるようにする
+    public static func mixedTranslation(keep: [String]) -> String {
+        """
+        あなたはプロの翻訳者です。入力の英文を、要約・省略せずに自然な日本語へ全文翻訳してください。出力は訳文のみとし、前置きや説明を含めないでください。
+        ただし、下の「英語のまま残す表現」が英文の中に出てきたら、その部分は訳さずに英語のまま残し、次の形で書いてください。
+        \(MixedTranslation.open)<英文での表記> | <その部分の日本語訳>\(MixedTranslation.close)
+        - 英語のまま残した表現の前後は、日本語の文として自然になるよう助詞や語順を整えてください(例: 「\(MixedTranslation.open)hotfix | 緊急修正\(MixedTranslation.close)を出しました」「\(MixedTranslation.open)edge case | 想定外のケース\(MixedTranslation.close)を見落とさないように」)
+        - 動詞・形容詞の表現は「〜する」「〜な」を付けるなどして、日本語の文の中で使える形にしてください
+        - それ以外の語は、すべて日本語に訳してください。製品名・人名・コード・URL は原文のままで構いませんが、\(MixedTranslation.open)\(MixedTranslation.close)では囲まないでください
+        - 入力の英文に無い内容を訳文に足さないでください
+        入力が Markdown 記法を含む場合は記法を保ってください。
+
+        # 英語のまま残す表現
+        \(keep.map { "- \($0)" }.joined(separator: "\n"))
+        """
+    }
+
+    // 覚えた表現が少ない英文で、英語のまま読ませるやさしい語を選ばせる
+    public static func easyWords(source: String, count: Int, excluding: [String]) -> String {
+        """
+        日本語を母語とし、ソフトウェア企業で働く英語学習者が、訳さなくても読めそうなやさしい単語を、下の英文から\(count)つ選んでください。
+        名詞か形容詞を選び、英文に出てくる表記のまま1行に1つずつ書いてください。それ以外は何も出力しないでください。
+        人名・製品名・コード・URL は選ばないでください。
+        \(excluding.isEmpty ? "" : "次の語は選ばないでください: " + excluding.joined(separator: ", "))
+
+        # 英文
+        \(source.prefix(4000))
+        """
+    }
+
     public static let chunkPrefix = "CHUNK:"
 
     // 答えから「CHUNK:」の行を抜き出し、画面に出す本文と覚える表現に分ける。
