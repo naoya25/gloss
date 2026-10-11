@@ -651,20 +651,35 @@ extension AskStore {
 }
 
 // 英文を Samantha の声で読み上げる。読んでいる間に押すと止まる
+// 小さい場所では印だけにする。ショートカットは画面に1つだけのテストの英文に付ける
 struct SpeakTextButton: View {
     @Environment(SpeechStore.self) private var speech
     let text: String
+    var isCompact = false
 
     var body: some View {
         let isSpeaking = speech.state.speakingText == text
-        Button {
+        let symbol = isSpeaking ? "speaker.wave.2.fill" : "speaker.wave.2"
+        let button = Button {
             isSpeaking ? speech.stop() : speech.speak(text)
         } label: {
-            Label(isSpeaking ? "Stop" : "Listen", systemImage: isSpeaking ? "speaker.wave.2.fill" : "speaker.wave.2")
-                .foregroundStyle(isSpeaking ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+            Group {
+                if isCompact {
+                    Image(systemName: symbol)
+                } else {
+                    Label(isSpeaking ? "Stop" : "Listen", systemImage: symbol)
+                }
+            }
+            .foregroundStyle(isSpeaking ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
         }
         .buttonStyle(.borderless)
-        .keyboardShortcut("l", modifiers: [.command, .option])
-        .help(isSpeaking ? "Stop" : "Listen to the English (⌥⌘L)")
+        .accessibilityLabel(isSpeaking ? "Stop" : "Listen")
+        if isCompact {
+            button.help(isSpeaking ? "Stop" : "Listen")
+        } else {
+            button
+                .keyboardShortcut("l", modifiers: [.command, .option])
+                .help(isSpeaking ? "Stop" : "Listen to the English (⌥⌘L)")
+        }
     }
 }

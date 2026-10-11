@@ -52,6 +52,10 @@ private struct AskHeader: View {
                     .textSelection(.enabled)
                     .lineLimit(3)
                 Spacer()
+                // 日本語を選んで質問したときは読み上げない。声は英語用なので
+                if !MixedTranslation.containsJapanese(ask.state.focus) {
+                    SpeakTextButton(text: ask.state.focus, isCompact: true)
+                }
             }
             StudyChunks()
             if router.route == .words, let word = ask.focusWord {
@@ -94,6 +98,17 @@ private struct ChunkToggle: View {
 
     var body: some View {
         let isSaved = ask.isSaved(chunk)
+        // 説明が長いと行の右端が切れるので、読み上げは頭に置く
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            if !MixedTranslation.containsJapanese(chunk.expression) {
+                SpeakTextButton(text: chunk.expression, isCompact: true)
+                    .font(.caption)
+            }
+            saveButton(isSaved: isSaved)
+        }
+    }
+
+    private func saveButton(isSaved: Bool) -> some View {
         Button {
             ask.toggleSaved(chunk)
         } label: {
