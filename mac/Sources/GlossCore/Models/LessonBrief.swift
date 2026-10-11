@@ -23,11 +23,8 @@ public struct LessonBrief: Sendable {
         var lines = [
             "# My English Learning Data (Gloss)",
             "",
-            "You are my English tutor in a voice lesson. I'm a Japanese software engineer learning English used at work.",
-            "Use the data below to run the lesson: practice the words I haven't learned yet in short spoken exchanges,",
-            "revisit the words and sentences I got wrong, and use my known words naturally. Speak simple English,",
-            "correct my mistakes briefly, and switch to Japanese only when I'm stuck.",
-            "Ask one question at a time and wait for my answer. Don't read the lists aloud.",
+            "You are my English tutor in a voice lesson.",
+            "Use the data below to run the lesson.",
             "",
             "## Summary",
             "",
