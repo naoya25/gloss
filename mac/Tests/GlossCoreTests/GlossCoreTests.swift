@@ -437,3 +437,9 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     ]
     #expect(Points.total(events) == 100)
 }
+
+@Test func wordsSortAlphabeticallyByEnglishAndShuffleRandomly() {
+    let words = ["deploy", "ASAP", "backfill"].map { WordEntry(term: $0, note: "", context: "") }
+    #expect(words.sorted(by: .alphabetical).map(\.term) == ["ASAP", "backfill", "deploy"])
+    #expect(Set(words.sorted(by: .random).map(\.term)) == Set(["deploy", "ASAP", "backfill"]))
+}

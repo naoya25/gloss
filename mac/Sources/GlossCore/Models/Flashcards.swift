@@ -35,6 +35,8 @@ public enum WordSort: String, Codable, CaseIterable, Identifiable, Sendable {
     case fewestFlips
     case mastery
     case newest
+    case alphabetical
+    case random
 
     public var id: String { rawValue }
 
@@ -44,6 +46,8 @@ public enum WordSort: String, Codable, CaseIterable, Identifiable, Sendable {
         case .fewestFlips: "Fewest Flips"
         case .mastery: "Least Known"
         case .newest: "Newest"
+        case .alphabetical: "A to Z"
+        case .random: "Random"
         }
     }
 }
@@ -72,8 +76,9 @@ extension WordEntry {
 
 extension Array where Element == WordEntry {
     public func sorted(by order: WordSort) -> [WordEntry] {
+        if order == .random { return shuffled() }
         // 同じ値どうしは追加が新しい順にして、並びが毎回ぶれないようにする
-        sorted { a, b in
+        return sorted { a, b in
             switch order {
             case .stale:
                 let left = a.lastReviewed ?? .distantPast
@@ -83,7 +88,10 @@ extension Array where Element == WordEntry {
                 if a.flipCount != b.flipCount { return a.flipCount < b.flipCount }
             case .mastery:
                 if a.masteryLevel != b.masteryLevel { return a.masteryLevel.rawValue < b.masteryLevel.rawValue }
-            case .newest:
+            case .alphabetical:
+                let order = a.text(for: .english).localizedCaseInsensitiveCompare(b.text(for: .english))
+                if order != .orderedSame { return order == .orderedAscending }
+            case .newest, .random:
                 break
             }
             return a.date > b.date
