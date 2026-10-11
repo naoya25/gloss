@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isoSeconds, newID } from "./ids";
 import { Mastery, type ActivityEvent, type WordEntry } from "./models";
+import { lessonBrief } from "./lessonBrief";
 import { isExactAnswer, pickQuestions } from "./quiz";
 import { bookSize, lastDays, quizTotals, streak } from "./report";
 import { pickVoice } from "./speech";
@@ -116,5 +117,28 @@ describe("pickVoice", () => {
     expect(pickVoice([voice("Daniel", "en-GB"), voice("Alex", "en-US")])?.name).toBe("Alex");
     expect(pickVoice([voice("Kyoko", "ja-JP"), voice("Daniel", "en-GB")])?.name).toBe("Daniel");
     expect(pickVoice([voice("Samantha", "en-US"), voice("Samantha (Enhanced)", "en-US")])?.name).toBe("Samantha (Enhanced)");
+  });
+});
+
+describe("lessonBrief", () => {
+  it("groups words by mastery and lists recent mistakes like the Mac", () => {
+    const known = word({ term: "FYI", english: undefined, japanese: "参考までに", mastery: Mastery.Known });
+    const learning = word({ term: "hotfix", english: undefined, japanese: undefined, note: "緊急の修正\n詳しい説明", mastery: Mastery.Unsure });
+    const now = new Date(2026, 9, 11, 12);
+    const quiz: ActivityEvent = {
+      id: "q",
+      date: new Date(2026, 9, 10).toISOString(),
+      kind: "wordQuiz",
+      title: "Word Test",
+      score: 0,
+      total: 1,
+      answers: [{ wordID: learning.id, prompt: "緊急の修正", answer: "", verdict: Mastery.NotYet }],
+    };
+    const text = lessonBrief([known, learning], [quiz], now);
+    expect(text).toContain("- Date: 2026-10-11");
+    expect(text).toContain("## Words: Known (1)\n\n- FYI — 参考までに");
+    expect(text).toContain("## Words: Unsure (1)\n\n- hotfix — 緊急の修正\n");
+    expect(text).toContain("- 緊急の修正 → my answer: (blank) (correct: hotfix — 緊急の修正)");
+    expect(text).toContain("Word Test, last 30 days: 0 / 1 correct");
   });
 });

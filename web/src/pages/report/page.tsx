@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { activityLabel } from "../../core/models";
+import { lessonBrief } from "../../core/lessonBrief";
 import { averageScore, bookSize, countKind, dailyCounts, eventsOn, lastDays, pointsOf, quizTotals, streak, totalPoints, englishRate } from "../../core/report";
 import { reportImage, reportMarkdown, type ReportSummary } from "../../core/reportCard";
 import { useActivity } from "../../stores/activity";
@@ -61,6 +62,7 @@ function Today() {
         ))}
       </div>
       {today.length > 0 && <ShareReport summary={{ day: new Date(), streak: days, events: today }} />}
+      <CopyLesson />
       {today.length === 0 ? (
         <p className="empty">Nothing yet today. Flip some cards or take a test.</p>
       ) : (
@@ -136,6 +138,32 @@ function ShareReport({ summary }: { summary: ReportSummary }) {
       </button>
       <button type="button" onClick={() => void copyText()}>
         Copy as Markdown
+      </button>
+      {status && <span className="sub">{status}</span>}
+    </div>
+  );
+}
+
+// 単語帳と最近のテストを全部まとめてコピーする。ChatGPT の音声通話に貼ってレッスンしてもらう用
+function CopyLesson() {
+  const events = useActivity((state) => state.events);
+  const words = useWords((state) => state.words);
+  const [status, setStatus] = useState<string | null>(null);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(lessonBrief(words, events));
+      setStatus("Copied");
+    } catch {
+      setStatus("Couldn't copy");
+    }
+    setTimeout(() => setStatus(null), 1800);
+  }
+
+  return (
+    <div className="share">
+      <button type="button" onClick={() => void copy()}>
+        Copy All for AI Lesson
       </button>
       {status && <span className="sub">{status}</span>}
     </div>

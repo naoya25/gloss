@@ -443,3 +443,20 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     #expect(words.sorted(by: .alphabetical).map(\.term) == ["ASAP", "backfill", "deploy"])
     #expect(Set(words.sorted(by: .random).map(\.term)) == Set(["deploy", "ASAP", "backfill"]))
 }
+
+@Test func lessonBriefGroupsWordsByMasteryAndListsMistakes() {
+    var known = WordEntry(term: "FYI", note: "", context: "")
+    known.japanese = "参考までに"
+    known.mastery = .known
+    var learning = WordEntry(term: "hotfix", note: "緊急の修正\n詳しい説明", context: "")
+    learning.mastery = .unsure
+    let quiz = ActivityEvent(
+        kind: .wordQuiz, title: "Word Test", score: 0, total: 1,
+        answers: [WordAnswer(wordID: learning.id, prompt: "緊急の修正", answer: "", verdict: .notYet)]
+    )
+    let markdown = LessonBrief(words: [known, learning], events: [quiz]).markdown()
+    #expect(markdown.contains("## Words: Known (1)\n\n- FYI — 参考までに"))
+    #expect(markdown.contains("## Words: Unsure (1)\n\n- hotfix — 緊急の修正\n"))
+    #expect(markdown.contains("- 緊急の修正 → my answer: (blank) (correct: hotfix — 緊急の修正)"))
+    #expect(markdown.contains("Word Test, last 30 days: 0 / 1 correct"))
+}
