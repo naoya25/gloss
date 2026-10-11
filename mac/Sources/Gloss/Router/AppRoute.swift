@@ -6,6 +6,7 @@ enum AppRoute: Hashable, CaseIterable {
     case words
     case wordTest
     case meaningTest
+    case choiceTest
     case writingTest
     case readingTest
     case report
@@ -17,6 +18,7 @@ enum AppRoute: Hashable, CaseIterable {
         case .words: "Book"
         case .wordTest: "Word Test"
         case .meaningTest: "Meaning Test"
+        case .choiceTest: "4-Choice Test"
         case .writingTest: "Writing Test"
         case .readingTest: "Reading Test"
         case .report: "Report"
@@ -30,6 +32,7 @@ enum AppRoute: Hashable, CaseIterable {
         case .words: "book.closed"
         case .wordTest: "character.textbox"
         case .meaningTest: "character.book.closed"
+        case .choiceTest: "square.grid.2x2"
         case .writingTest: "pencil.and.list.clipboard"
         case .readingTest: "text.magnifyingglass"
         case .report: "chart.bar.xaxis"
@@ -38,7 +41,7 @@ enum AppRoute: Hashable, CaseIterable {
     }
 
     // サイドバーでは、テストを Challenge の下にまとめる
-    static let challenges: [AppRoute] = [.wordTest, .meaningTest, .writingTest, .readingTest]
+    static let challenges: [AppRoute] = [.choiceTest, .wordTest, .meaningTest, .writingTest, .readingTest]
 
     @MainActor @ViewBuilder
     var page: some View {
@@ -47,6 +50,7 @@ enum AppRoute: Hashable, CaseIterable {
         case .words: WordsPage()
         case .wordTest: WordTestPage(direction: .toEnglish)
         case .meaningTest: WordTestPage(direction: .toJapanese)
+        case .choiceTest: ChoiceTestPage()
         case .writingTest: ExercisePage(kind: .writing)
         case .readingTest: ExercisePage(kind: .reading)
         case .report: ReportPage()

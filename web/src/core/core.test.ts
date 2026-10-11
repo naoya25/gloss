@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { isoSeconds, newID } from "./ids";
 import { Mastery, type ActivityEvent, type WordEntry } from "./models";
 import { lessonBrief } from "./lessonBrief";
-import { isExactAnswer, pickQuestions } from "./quiz";
+import { choiceOptions, isExactAnswer, nextMastery, pickQuestions } from "./quiz";
 import { bookSize, lastDays, quizTotals, streak } from "./report";
 import { pickVoice } from "./speech";
 import { activityRow, didPushWords, mergeActivity, mergeWords, wordRows } from "./sync";
@@ -140,5 +140,24 @@ describe("lessonBrief", () => {
     expect(text).toContain("## Words: Unsure (1)\n\n- hotfix — 緊急の修正\n");
     expect(text).toContain("- 緊急の修正 → my answer: (blank) (correct: hotfix — 緊急の修正)");
     expect(text).toContain("Word Test, last 30 days: 0 / 1 correct");
+  });
+});
+
+describe("4-choice test", () => {
+  it("options hold the answer and distinct distractors", () => {
+    const target = word({ english: "hotfix", term: "hotfix", japanese: "緊急の修正" });
+    const words = [target, word({ english: "deploy" }), word({ english: "Deploy" }), word({ english: "FYI" }), word({ english: "edge case" })];
+    for (let i = 0; i < 50; i++) {
+      const options = choiceOptions(target, words, "toEnglish");
+      expect(options).toHaveLength(4);
+      expect(options).toContainEqual({ text: "hotfix", meaning: "緊急の修正" });
+      expect(new Set(options.map((option) => option.text.toLowerCase())).size).toBe(4);
+    }
+  });
+  it("steps mastery up one level and resets on a miss", () => {
+    expect(nextMastery(Mastery.NotYet, true)).toBe(Mastery.Unsure);
+    expect(nextMastery(Mastery.Unsure, true)).toBe(Mastery.Known);
+    expect(nextMastery(Mastery.Known, true)).toBe(Mastery.Known);
+    expect(nextMastery(Mastery.Known, false)).toBe(Mastery.NotYet);
   });
 });

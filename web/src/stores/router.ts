@@ -1,9 +1,10 @@
 import { create } from "zustand";
 
-export type Route = "book" | "test" | "report";
+export type Route = "book" | "choice" | "test" | "report";
 
 export const routes: { route: Route; label: string }[] = [
   { route: "book", label: "Book" },
+  { route: "choice", label: "4-Choice" },
   { route: "test", label: "Test" },
   { route: "report", label: "Report" },
 ];

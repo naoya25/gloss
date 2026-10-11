@@ -16,6 +16,24 @@ struct WordQuizState {
     func answer(for id: UUID) -> String { answers[id] ?? "" }
 }
 
+struct ChoiceQuizState {
+    var questions: [WordEntry] = []
+    var options: [UUID: [ChoiceOption]] = [:]
+    var picks: [UUID: String] = [:]
+    var index = 0
+
+    var current: WordEntry? { questions[safe: index] }
+    var isFinished: Bool { !questions.isEmpty && index >= questions.count }
+
+    func isCorrect(_ word: WordEntry, direction: WordDirection) -> Bool {
+        picks[word.id] == direction.expected(for: word)
+    }
+
+    func correctCount(direction: WordDirection) -> Int {
+        questions.filter { isCorrect($0, direction: direction) }.count
+    }
+}
+
 struct ExerciseState {
     var task: WritingTask?
     var answer = ""
@@ -31,6 +49,8 @@ struct QuizState {
     var meanings = WordQuizState()
     var writing = ExerciseState()
     var reading = ExerciseState()
+    var choiceDirection = WordDirection.toEnglish
+    var choices: [WordDirection: ChoiceQuizState] = [:]
 
     subscript(direction: WordDirection) -> WordQuizState {
         get { direction == .toEnglish ? words : meanings }
@@ -152,6 +172,60 @@ final class QuizStore {
             grades[word.id].map { WordAnswer(wordID: word.id, prompt: direction.prompt(for: word), answer: quiz.answer(for: word.id), verdict: $0.verdict) }
         }
         activity.record(ActivityEvent(kind: kind, title: kind.label, score: quiz.knownCount, total: quiz.questions.count, answers: answers))
+    }
+
+    func openChoiceQuiz() {
+        if state.choices[state.choiceDirection]?.questions.isEmpty ?? true { startChoiceQuiz() }
+    }
+
+    func setChoiceDirection(_ direction: WordDirection) {
+        state.choiceDirection = direction
+        openChoiceQuiz()
+    }
+
+    // onlyMissed のときは、外した単語だけでもう一度
+    func startChoiceQuiz(onlyMissed: Bool = false) {
+        let direction = state.choiceDirection
+        let previous = state.choices[direction] ?? ChoiceQuizState()
+        let all = words.state.words
+        let questions = onlyMissed
+            ? previous.questions.filter { !previous.isCorrect($0, direction: direction) }.compactMap { word in all.first { $0.id == word.id } }
+            : WordQuiz.pick(from: all)
+        var quiz = ChoiceQuizState(questions: questions)
+        for word in questions {
+            quiz.options[word.id] = ChoiceQuiz.options(for: word, among: all, direction: direction)
+        }
+        state.choices[direction] = quiz
+    }
+
+    // 当たっても自動では進まない。ほかの選択肢の意味を見てから、自分で次へ進む
+    func pickChoice(_ option: String) {
+        let direction = state.choiceDirection
+        guard let word = state.choices[direction]?.current, state.choices[direction]?.picks[word.id] == nil else { return }
+        state.choices[direction]?.picks[word.id] = option
+    }
+
+    func nextChoice() {
+        let direction = state.choiceDirection
+        guard var quiz = state.choices[direction], let word = quiz.current, quiz.picks[word.id] != nil else { return }
+        quiz.index += 1
+        state.choices[direction] = quiz
+        if quiz.isFinished { finishChoiceQuiz(quiz, direction: direction) }
+    }
+
+    private func finishChoiceQuiz(_ quiz: ChoiceQuizState, direction: WordDirection) {
+        var answers: [WordAnswer] = []
+        for word in quiz.questions {
+            let correct = quiz.isCorrect(word, direction: direction)
+            let current = words.state.words.first { $0.id == word.id }?.masteryLevel ?? word.masteryLevel
+            words.recordQuizAnswer(word.id, mastery: ChoiceQuiz.nextMastery(after: current, correct: correct))
+            answers.append(WordAnswer(wordID: word.id, prompt: direction.prompt(for: word), answer: quiz.picks[word.id] ?? "", verdict: correct ? .known : .notYet))
+        }
+        let score = quiz.correctCount(direction: direction)
+        activity.record(ActivityEvent(
+            kind: direction == .toEnglish ? .wordQuiz : .meaningQuiz, title: ChoiceQuiz.title, score: score, total: quiz.questions.count,
+            answers: answers, points: score * ChoiceQuiz.pointsPerCorrect
+        ))
     }
 
     func openExercise(_ kind: ExerciseKind) {

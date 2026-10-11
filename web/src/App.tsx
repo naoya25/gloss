@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { BookPage } from "./pages/book/page";
+import { ChoicePage } from "./pages/choice/page";
 import { LoginPage } from "./pages/login/page";
 import { ReportPage } from "./pages/report/page";
 import { TestPage } from "./pages/test/page";
@@ -37,7 +38,7 @@ export function App() {
   return (
     <div className="app">
       {syncError && <div className="banner">{syncError}</div>}
-      <main>{route === "book" ? <BookPage /> : route === "test" ? <TestPage /> : <ReportPage />}</main>
+      <main>{route === "book" ? <BookPage /> : route === "choice" ? <ChoicePage /> : route === "test" ? <TestPage /> : <ReportPage />}</main>
       <nav className="tabs">
         {routes.map((item) => (
           <button key={item.route} type="button" aria-current={route === item.route ? "page" : undefined} onClick={() => go(item.route)}>
@@ -53,6 +54,7 @@ export function App() {
 function TabIcon({ route }: { route: string }) {
   const paths: Record<string, string> = {
     book: "M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4zm0 13a3 3 0 0 1 3-3h10",
+    choice: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
     test: "M9 11l3 3 7-7M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9",
     report: "M5 20V10m7 10V4m7 16v-7",
   };

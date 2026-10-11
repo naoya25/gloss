@@ -460,3 +460,25 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     #expect(markdown.contains("- 緊急の修正 → my answer: (blank) (correct: hotfix — 緊急の修正)"))
     #expect(markdown.contains("Word Test, last 30 days: 0 / 1 correct"))
 }
+
+@Test func choiceOptionsHoldTheAnswerAndDistinctDistractors() {
+    func card(_ english: String, _ japanese: String) -> WordEntry {
+        var word = WordEntry(term: english, note: "", context: "")
+        word.english = english
+        word.japanese = japanese
+        return word
+    }
+    let target = card("hotfix", "緊急の修正")
+    let words = [target, card("deploy", "デプロイする"), card("Deploy", "展開する"), card("FYI", "参考までに"), card("edge case", "境界のケース")]
+    let options = ChoiceQuiz.options(for: target, among: words, direction: .toEnglish)
+    #expect(options.count == 4)
+    #expect(options.contains(ChoiceOption(text: "hotfix", meaning: "緊急の修正")))
+    #expect(Set(options.map { $0.text.lowercased() }).count == 4)
+}
+
+@Test func choiceMasteryStepsUpOneLevelAndResetsOnMiss() {
+    #expect(ChoiceQuiz.nextMastery(after: .notYet, correct: true) == .unsure)
+    #expect(ChoiceQuiz.nextMastery(after: .unsure, correct: true) == .known)
+    #expect(ChoiceQuiz.nextMastery(after: .known, correct: true) == .known)
+    #expect(ChoiceQuiz.nextMastery(after: .known, correct: false) == .notYet)
+}
