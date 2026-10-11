@@ -3,6 +3,7 @@ import { isoSeconds, newID } from "./ids";
 import { Mastery, type ActivityEvent, type WordEntry } from "./models";
 import { isExactAnswer, pickQuestions } from "./quiz";
 import { bookSize, lastDays, quizTotals, streak } from "./report";
+import { pickVoice } from "./speech";
 import { activityRow, didPushWords, mergeActivity, mergeWords, wordRows } from "./sync";
 
 const word = (patch: Partial<WordEntry> = {}): WordEntry => ({
@@ -104,5 +105,16 @@ describe("pickQuestions", () => {
     const words = Array.from({ length: 12 }, (_, i) => word({ term: `w${i}` }));
     const recent = new Set(words.slice(0, 10).map((w) => w.id));
     expect(pickQuestions(words, 10, recent)).toHaveLength(10);
+  });
+});
+
+describe("pickVoice", () => {
+  const voice = (name: string, lang: string) => ({ name, lang }) as SpeechSynthesisVoice;
+
+  it("prefers Samantha, then American English, then any English", () => {
+    expect(pickVoice([voice("Daniel", "en-GB"), voice("Samantha", "en-US"), voice("Alex", "en-US")])?.name).toBe("Samantha");
+    expect(pickVoice([voice("Daniel", "en-GB"), voice("Alex", "en-US")])?.name).toBe("Alex");
+    expect(pickVoice([voice("Kyoko", "ja-JP"), voice("Daniel", "en-GB")])?.name).toBe("Daniel");
+    expect(pickVoice([voice("Samantha", "en-US"), voice("Samantha (Enhanced)", "en-US")])?.name).toBe("Samantha (Enhanced)");
   });
 });

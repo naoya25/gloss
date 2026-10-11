@@ -24,6 +24,7 @@ struct GlossApp: App {
     @State private var translate: TranslateStore
     @State private var activity: ActivityStore
     @State private var quiz: QuizStore
+    @State private var speech = SpeechStore()
 
     init() {
         let settings = SettingsStore()
@@ -50,6 +51,7 @@ struct GlossApp: App {
                 .environment(translate)
                 .environment(activity)
                 .environment(quiz)
+                .environment(speech)
                 .frame(minWidth: 760, minHeight: 480)
                 // 別の Mac で増えた単語を、Gloss に戻ってきたときに取ってくる
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in

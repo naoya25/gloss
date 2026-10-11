@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react";
 import { Mastery, hasCardPair, masteryLabel, type WordEntry } from "../../core/models";
+import { canSpeak } from "../../core/speech";
 import { useActivity } from "../../stores/activity";
+import { useSpeech } from "../../stores/speech";
 import { useWords } from "../../stores/words";
 import { MasteryMark } from "../../widgets/mastery";
 import { sortLabels, useBook, type Face, type Sort } from "./store";
@@ -13,6 +15,13 @@ export function BookPage() {
   useEffect(() => {
     if (loaded) refresh(useWords.getState().words);
   }, [loaded, refresh]);
+
+  const listening = useSpeech((state) => state.listening);
+  const speakingID = useSpeech((state) => state.speakingID);
+  useEffect(() => () => useSpeech.getState().stop(), []);
+  useEffect(() => {
+    if (listening && speakingID) document.getElementById(`card-${speakingID}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [listening, speakingID]);
 
   const ordered = useMemo(() => {
     const byID = new Map(words.map((word) => [word.id, word]));
@@ -43,6 +52,18 @@ export function BookPage() {
           </select>
         </div>
       </header>
+      {canSpeak() && words.length > 0 && (
+        <div className="listen-bar">
+          <button
+            type="button"
+            className={listening ? "" : "primary"}
+            onClick={() => (listening ? useSpeech.getState().stop() : useSpeech.getState().listen(ordered))}
+          >
+            {listening ? "■ Stop" : "🎧 Listen to All"}
+          </button>
+          <span className="sub">{listening ? "Reading each word and its example…" : "Reads each word and its example aloud, from the top"}</span>
+        </div>
+      )}
       {!loaded ? null : words.length === 0 ? (
         <p className="empty">Your Book is empty. Words you save on the Mac show up here.</p>
       ) : (
@@ -62,6 +83,7 @@ function WordCard({ word, face }: { word: WordEntry; face: Face }) {
   const recordFlip = useWords((state) => state.recordFlip);
   const setMastery = useWords((state) => state.setMastery);
   const record = useActivity((state) => state.record);
+  const isSpeaking = useSpeech((state) => state.speakingID === word.id);
 
   const front = hasCardPair(word) ? (face === "english" ? word.english! : word.japanese!) : word.term;
   const back = hasCardPair(word) ? (face === "english" ? word.japanese! : word.english!) : word.term;
@@ -74,16 +96,29 @@ function WordCard({ word, face }: { word: WordEntry; face: Face }) {
   }
 
   return (
-    <li className={`card${isOpen ? " open" : ""}`}>
-      <button type="button" className="card-face" aria-expanded={isOpen} onClick={flip}>
-        <span className="card-text" key={isOpen ? "back" : "front"}>
-          {isOpen ? back : front}
-        </span>
-        <span className="card-meta">
-          <MasteryMark mastery={word.mastery ?? Mastery.NotYet} />
-          {word.flips ?? 0}
-        </span>
-      </button>
+    <li id={`card-${word.id}`} className={`card${isOpen ? " open" : ""}${isSpeaking ? " speaking" : ""}`}>
+      <div className="card-row">
+        <button type="button" className="card-face" aria-expanded={isOpen} onClick={flip}>
+          <span className="card-text" key={isOpen ? "back" : "front"}>
+            {isOpen ? back : front}
+          </span>
+          <span className="card-meta">
+            <MasteryMark mastery={word.mastery ?? Mastery.NotYet} />
+            {word.flips ?? 0}
+          </span>
+        </button>
+        {canSpeak() && (
+          <button
+            type="button"
+            className="speak"
+            aria-label={isSpeaking ? "Stop" : `Listen to ${word.english || word.term}`}
+            aria-pressed={isSpeaking}
+            onClick={() => (isSpeaking ? useSpeech.getState().stop() : useSpeech.getState().speak(word))}
+          >
+            {isSpeaking ? "■" : "🔊"}
+          </button>
+        )}
+      </div>
       {isOpen && (
         <div className="card-back">
           {word.example && (

@@ -59,6 +59,14 @@ select { background: var(--surface); border: 1px solid var(--line); border-radiu
 .card-text { flex: 1; min-width: 0; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
 @keyframes rise { from { opacity: 0; transform: translateY(0.35em); filter: blur(4px); } }
 .card-meta { display: flex; align-items: center; gap: 6px; color: var(--sub); font-size: 13px; }
+.card-row { display: flex; align-items: center; }
+.card-row .card-face { flex: 1; min-width: 0; }
+.speak { flex: none; width: 44px; height: 44px; margin-right: 6px; border: 0; border-radius: 10px; background: transparent; font-size: 18px; color: var(--sub); }
+.speak[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.card.speaking { border-color: var(--accent); }
+.listen-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: -8px 0 16px; }
+.listen-bar button { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.listen-bar .sub { color: var(--sub); font-size: 13px; }
 .card-back { padding: 0 16px 16px; display: grid; gap: 12px; }
 .card-back p { margin: 0; }
 .note { white-space: pre-wrap; font-size: 14px; }

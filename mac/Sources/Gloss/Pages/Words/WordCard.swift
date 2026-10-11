@@ -21,6 +21,7 @@ struct WordCard: View {
                 CardText(text: word.hasCardPair ? word.text(for: backFace) : word.term, isShown: isOpen, direction: 1)
             }
             Spacer(minLength: 12)
+            SpeakButton(word: word)
             ZStack(alignment: .trailing) {
                 ReviewInfo(word: word)
                     .opacity(isOpen ? 0 : 1)
@@ -173,5 +174,25 @@ extension Mastery {
         case .unsure: .orange
         case .known: .green
         }
+    }
+}
+
+private struct SpeakButton: View {
+    @Environment(SpeechStore.self) private var speech
+    let word: WordEntry
+
+    var body: some View {
+        let isSpeaking = speech.state.speakingWordID == word.id
+        Button {
+            isSpeaking ? speech.stop() : speech.speak(word)
+        } label: {
+            Image(systemName: isSpeaking ? "speaker.wave.2.fill" : "speaker.wave.2")
+                .foregroundStyle(isSpeaking ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(isSpeaking ? "Stop" : "Listen to the word and its example")
+        .accessibilityLabel(isSpeaking ? "Stop" : "Listen")
     }
 }
