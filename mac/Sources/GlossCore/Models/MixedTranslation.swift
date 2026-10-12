@@ -121,6 +121,25 @@ public struct MixedTranslation: Equatable, Sendable {
         return latin >= 10 && japanese * 20 < latin
     }
 
+    // 選んだ文から英語のところだけを抜き出す。読み上げの声は英語用なので、日本語は読まずに区切りにする
+    public static func englishParts(of text: String) -> String? {
+        var parts: [String] = []
+        var current = ""
+        for scalar in text.unicodeScalars {
+            if isJapanese(scalar) || (0x3000...0x303F).contains(scalar.value) || (0xFF01...0xFF65).contains(scalar.value) {
+                parts.append(current)
+                current = ""
+            } else {
+                current.unicodeScalars.append(scalar)
+            }
+        }
+        parts.append(current)
+        let english = parts
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters.subtracting(CharacterSet(charactersIn: "'’")))) }
+            .filter { $0.unicodeScalars.contains { CharacterSet.letters.contains($0) && $0.isASCII } }
+        return english.isEmpty ? nil : english.joined(separator: ". ")
+    }
+
     public static func containsJapanese(_ text: String) -> Bool {
         text.unicodeScalars.contains(where: isJapanese)
     }

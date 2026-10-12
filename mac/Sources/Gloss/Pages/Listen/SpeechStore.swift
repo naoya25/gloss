@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import GlossCore
 import Observation
@@ -31,6 +32,38 @@ final class SpeechStore {
             await say(text)
             if !Task.isCancelled { state.speakingText = nil }
         }
+    }
+
+    // 画面のどこでも、選んだ英語を読み上げる。選んだ文の取り方は、文字の欄ならその欄から、
+    // それ以外(選べる Text など)はコピーを借りて読み、クリップボードは元に戻す
+    func speakSelection() {
+        guard let text = Self.selectedText(), let english = MixedTranslation.englishParts(of: text) else {
+            NSSound.beep()
+            return
+        }
+        speak(english)
+    }
+
+    private static func selectedText() -> String? {
+        if let view = NSApp.keyWindow?.firstResponder as? NSTextView {
+            let selected = view.selectedRanges.map { (view.string as NSString).substring(with: $0.rangeValue) }.joined(separator: " ")
+            if !selected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return selected }
+        }
+        let pasteboard = NSPasteboard.general
+        let saved = pasteboard.pasteboardItems?.map { item in
+            item.types.reduce(into: [NSPasteboard.PasteboardType: Data]()) { $0[$1] = item.data(forType: $1) }
+        } ?? []
+        let before = pasteboard.changeCount
+        NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
+        guard pasteboard.changeCount != before else { return nil }
+        let copied = pasteboard.string(forType: .string)
+        pasteboard.clearContents()
+        pasteboard.writeObjects(saved.map { types in
+            let item = NSPasteboardItem()
+            for (type, data) in types { item.setData(data, forType: type) }
+            return item
+        })
+        return copied
     }
 
     func listen(_ words: [WordEntry]) {

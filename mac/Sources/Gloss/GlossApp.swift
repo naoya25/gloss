@@ -54,6 +54,9 @@ struct GlossApp: App {
                 .environment(speech)
                 .frame(minWidth: 760, minHeight: 480)
                 // 別の Mac で増えた単語を、Gloss に戻ってきたときに取ってくる
+                .onReceive(NotificationCenter.default.publisher(for: .speakSelection)) { _ in
+                    speech.speakSelection()
+                }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     words.sync()
                     activity.sync()
@@ -67,6 +70,13 @@ struct GlossApp: App {
                     router.go(.translate)
                 }
                 .keyboardShortcut("n")
+            }
+            CommandGroup(after: .pasteboard) {
+                Divider()
+                Button("Speak Selection") { speech.speakSelection() }
+                    .keyboardShortcut("s", modifiers: [.control, .command])
+                Button("Stop Speaking") { speech.stop() }
+                    .keyboardShortcut(".", modifiers: [.control, .command])
             }
         }
 

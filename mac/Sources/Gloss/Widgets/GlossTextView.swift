@@ -8,6 +8,19 @@ final class GlossNSTextView: NSTextView {
 
     // super の mouseDown はマウスを離すまで戻らないので、戻った時点で選択は確定している。
     // ダブルクリックの単語も、ドラッグで選んだフレーズも、ここで質問に回す
+    // 右クリックの先頭に「選んだ英語を読み上げる」を足す。読み上げは SpeechStore が持つので、通知で頼む
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        guard selectedRange().length > 0 else { return menu }
+        menu.insertItem(.separator(), at: 0)
+        menu.insertItem(NSMenuItem(title: "Speak Selection", action: #selector(speakSelection(_:)), keyEquivalent: ""), at: 0)
+        return menu
+    }
+
+    @objc private func speakSelection(_ sender: Any?) {
+        NotificationCenter.default.post(name: .speakSelection, object: nil)
+    }
+
     override func mouseDown(with event: NSEvent) {
         super.mouseDown(with: event)
         let range = selectedRange()
@@ -153,4 +166,8 @@ struct GlossTextView: NSViewRepresentable {
             parent.onSelect(selected)
         }
     }
+}
+
+extension Notification.Name {
+    static let speakSelection = Notification.Name("GlossSpeakSelection")
 }

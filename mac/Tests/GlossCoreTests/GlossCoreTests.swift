@@ -502,3 +502,10 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
 @Test func writingAverageUsesTheLastFiveScores() {
     #expect(Growth.movingAverage([40, 60, 80, 100, 20, 100]) == [40, 50, 60, 70, 60, 72])
 }
+
+@Test func englishPartsSkipJapanese() {
+    #expect(MixedTranslation.englishParts(of: "rule of thumb 経験則・大まかな目安") == "rule of thumb")
+    #expect(MixedTranslation.englishParts(of: "FYI、ログインの hotfix をプッシュしました。") == "FYI. hotfix")
+    #expect(MixedTranslation.englishParts(of: "I'll push back on it.") == "I'll push back on it")
+    #expect(MixedTranslation.englishParts(of: "日本語だけ") == nil)
+}
