@@ -1,4 +1,4 @@
-import { countOn, cumulative, dailyCounts, englishRates, firstCorrect, movingAverage, newlyCorrect, writingScores } from "./growth";
+import { TEST_TRENDS, visibleDays, testCounts, latestEnglish, countOn, cumulative, dailyCounts, distinct, englishRates, firstCorrect, formatTest, matchesTest, newlyCorrect, testSeries, testValue } from "./growth";
 import type { ActivityEvent, WordEntry } from "./models";
 import { countKind, englishRate, eventsOn, lastDays, totalPoints } from "./report";
 
@@ -20,11 +20,11 @@ const DAYS = 14;
 function growthSummary({ day, allEvents, words }: ShareSummary) {
   const today = eventsOn(allEvents, day);
   const reads = today.filter((event) => event.kind === "glossRead");
-  const said = firstCorrect(allEvents, false);
-  const seen = firstCorrect(allEvents, true);
+  const said = distinct(firstCorrect(allEvents, false), words);
+  const seen = distinct(firstCorrect(allEvents, true), words);
   const byID = new Map(words.map((word) => [word.id, word]));
-  const days = lastDays(DAYS, day);
-  const scores = writingScores(allEvents, days[0]!);
+  const days = lastDays(visibleDays(DAYS, allEvents, day), day);
+  const recent = allEvents.filter((event) => Date.parse(event.date) >= days[0]!.getTime());
   return {
     today,
     rate: englishRate(today),
@@ -37,8 +37,13 @@ function growthSummary({ day, allEvents, words }: ShareSummary) {
     seen,
     seenOnly: [...seen.keys()].filter((id) => !said.has(id)).length,
     saidToday: newlyCorrect(said, day).flatMap((id) => byID.get(id) ?? []),
-    scores,
-    average: movingAverage(scores).at(-1),
+    tests: TEST_TRENDS.map((test) => ({
+      test,
+      value: testValue(test, recent),
+      count: recent.filter((event) => matchesTest(test, event)).length,
+      series: testSeries(test, allEvents, days),
+      perDay: testCounts(test, allEvents, days),
+    })),
     counts: dailyCounts(allEvents),
   };
 }
@@ -62,9 +67,10 @@ export function reportMarkdown(summary: ShareSummary): string {
   if (g.saidToday.length) {
     lines.push("", "### Words you said today", "", ...g.saidToday.map((word) => `- ${word.english ?? word.term} — ${word.japanese ?? word.term}`));
   }
-  if (g.average !== undefined) {
-    lines.push("", "## Writing Test", `${g.scores.length} tests in the last ${DAYS} days, average of the last 5: ${Math.round(g.average)} pts`);
-  }
+  const testLines = g.tests.flatMap(({ test, value, count }) =>
+    value === null ? [] : [`- ${test.label}: ${count} times, ${Math.round(value)}${test.unit === "%" ? "% correct" : " pts on average"}`],
+  );
+  if (testLines.length) lines.push("", `## Tests (last ${DAYS} days)`, ...testLines);
   const tests = g.today.filter((event) => event.kind === "wordQuiz" || event.kind === "meaningQuiz").length;
   lines.push(
     "",
@@ -92,7 +98,7 @@ export async function reportImage(summary: ShareSummary): Promise<Blob> {
   const chartH = 120;
   const cardH = (inner: number) => 16 + 18 + 18 + inner + 16;
   const wordsH = g.saidToday.length ? 40 + Math.ceil(g.saidToday.length / 2) * 50 : 0;
-  const height = PAD + 44 + 16 + 150 + 16 + cardH(chartH) + 12 + cardH(chartH + 18) + 12 + cardH(chartH) + 12 + cardH(110) + 16 + wordsH + 40 + PAD;
+  const height = PAD + 44 + 16 + 150 + 16 + cardH(chartH) + 12 + cardH(chartH + 18) + 12 + cardH(5 * 80 + 14) + 12 + cardH(110) + 16 + wordsH + 40 + PAD;
   const scale = 2;
   const canvas = document.createElement("canvas");
   canvas.width = WIDTH * scale;
@@ -127,7 +133,9 @@ export async function reportImage(summary: ShareSummary): Promise<Blob> {
   const heroW = (INNER - 12) / 2;
   box(PAD, y, heroW, 150);
   text("Read in English", PAD + 16, y + 26, 12, SUB);
-  text(g.rate === null ? "–" : `${g.rate}%`, PAD + 16, y + 78, 48, INK, 700);
+  const latest = g.rate === null ? latestEnglish(summary.allEvents) : null;
+  text(g.rate !== null ? `${g.rate}%` : latest ? `${latest.rate}%` : "–", PAD + 16, y + 78, 48, g.rate === null ? SUB : INK, 700);
+  if (latest) text(`On ${md(latest.day)}. Nothing yet today.`, PAD + 16, y + 102, 12, SUB);
   if (g.rate !== null) {
     text(`${g.texts} texts translated today`, PAD + 16, y + 102, 12, SUB);
     ctx.fillStyle = LINE;
@@ -202,33 +210,54 @@ export async function reportImage(summary: ShareSummary): Promise<Blob> {
     line(PAD + 16, top + 18, INNER - 32, chartH, seenLine, max, SEEN, "", true);
     line(PAD + 16, top + 18, INNER - 32, chartH, saidLine, max, EN, "", false);
   });
-  card("Writing Test", "Each score, and the average of the last 5 (last 2 weeks)", chartH, (top) => {
-    if (!g.scores.length) return text("No Writing Tests in the last 2 weeks", PAD + 16, top + 20, 12, SUB);
-    const x = (i: number) => PAD + 44 + (i * (INNER - 68)) / Math.max(1, g.scores.length - 1);
-    const yy = (v: number) => top + chartH - 16 - (v / 100) * (chartH - 24);
-    for (const gv of [0, 50, 100]) {
-      ctx.strokeStyle = "#e6eaee";
+  const topCount = Math.max(1, ...g.tests.flatMap(({ perDay }) => perDay));
+  const rowH = 80;
+  card("Tests", "Bars: times a day (right scale). Line: result that day (left scale, 0–100)", 5 * rowH, (top) => {
+    g.tests.forEach(({ test, value, count, series, perDay }, row) => {
+      const ry = top + row * rowH;
+      text(test.label, PAD + 16, ry + 14, 13, INK, 600);
+      text(value === null ? "Not yet" : `${count}× · ${formatTest(test, value)}`, PAD + INNER - 16, ry + 14, 12, SUB, 400, "right");
+      const cx = PAD + 16 + 30;
+      const cw = INNER - 32 - 30 - 26;
+      const ct = ry + 24;
+      const ch = rowH - 24 - 8;
+      const step = cw / perDay.length;
+      const x = (i: number) => cx + step * (i + 0.5);
+      const yy = (v: number) => ct + ch - (v / 100) * ch;
+      for (const gv of [0, 50, 100]) {
+        ctx.fillStyle = "#e6eaee";
+        ctx.fillRect(cx, yy(gv), cw, 1);
+        text(`${gv}${test.unit === "%" ? "%" : ""}`, cx - 4, yy(gv) + 3, 10, SUB, 400, "right");
+        text(`${Math.round((gv / 100) * topCount)}×`, cx + cw + 4, yy(gv) + 3, 10, SUB);
+      }
+      ctx.fillStyle = "rgba(89, 99, 110, 0.35)";
+      perDay.forEach((v, i) => {
+        if (!v) return;
+        const h = (v / topCount) * ch;
+        ctx.beginPath();
+        ctx.roundRect(x(i) - step * 0.35, ct + ch - h, step * 0.7, h, 1.5);
+        ctx.fill();
+      });
+      const points = series.flatMap((v, i) => (v === null ? [] : [[x(i), yy(v)] as const]));
+      ctx.strokeStyle = EN;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(PAD + 44, yy(gv));
-      ctx.lineTo(PAD + INNER - 24, yy(gv));
+      points.forEach(([px, py], n) => (n ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
       ctx.stroke();
-      text(`${gv}`, PAD + 38, yy(gv) + 3, 10, SUB, 400, "right");
-    }
-    ctx.fillStyle = "#9aa3ad";
-    g.scores.forEach((score, i) => {
-      ctx.beginPath();
-      ctx.arc(x(i), yy(score), 3, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.fillStyle = EN;
+      for (const [px, py] of points) {
+        ctx.beginPath();
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (row === 4) g.days.forEach((d, i) => (g.days.length - 1 - i) % Math.ceil(g.days.length / 5) === 0 && text(md(d), x(i), ct + ch + 14, 10, SUB, 400, "center"));
     });
-    ctx.strokeStyle = EN;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    movingAverage(g.scores).forEach((v, i) => (i ? ctx.lineTo(x(i), yy(v)) : ctx.moveTo(x(i), yy(v))));
-    ctx.stroke();
-    ctx.lineWidth = 1;
   });
   card("Study days", "The days you studied, and how much. Darker means more", 110, (top) => {
-    const weeks = 26;
+    // 始めた週から今週まで。空の週ばかりが並ばないよう、最初のうちは8週だけ見せる
+    const first = Math.min(...summary.allEvents.map((event) => Date.parse(event.date)), day.getTime());
+    const weeks = Math.min(26, Math.max(8, Math.floor((day.getTime() - first) / (7 * 86_400_000)) + 2));
     const cell = 13;
     const gap = 3;
     const end = new Date(day.getFullYear(), day.getMonth(), day.getDate());
@@ -254,14 +283,14 @@ export async function reportImage(summary: ShareSummary): Promise<Blob> {
     text("Words you said today", PAD, y + 18, 17, INK, 700);
     y += 32;
     const colW = (INNER - 10) / 2;
+    // 単語帳の一覧のように、英語と日本語を1行ずつ並べる。枠で囲まず、細い線で区切る
     g.saidToday.forEach((word, i) => {
       const x = PAD + (i % 2) * (colW + 10);
       const top = y + Math.floor(i / 2) * 50;
-      box(x, top, colW, 42);
-      ctx.fillStyle = EN;
-      ctx.fillRect(x + 1, top + 6, 3, 30);
-      text(word.english ?? word.term, x + 14, top + 18, 13, INK, 600);
-      text(word.japanese ?? "", x + 14, top + 34, 11, SUB);
+      text(word.english ?? word.term, x, top + 18, 13, INK, 600);
+      text(word.japanese ?? "", x, top + 36, 11, SUB);
+      ctx.fillStyle = "#eef1f4";
+      ctx.fillRect(x, top + 46, colW, 1);
     });
     y += Math.ceil(g.saidToday.length / 2) * 50 + 8;
   }

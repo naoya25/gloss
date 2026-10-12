@@ -191,7 +191,7 @@ button:disabled { opacity: 0.6; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 .legend i.en { background: var(--en); }
 .legend i.seen { background: var(--seen); }
-.calendar { display: grid; grid-template-columns: repeat(15, 1fr); gap: 3px; }
+.calendar { display: grid; gap: 3px; }
 .calendar div { display: grid; gap: 3px; }
 .calendar i, .calendar-legend i { display: block; aspect-ratio: 1; border-radius: 3px; }
 .calendar i.future { visibility: hidden; }
@@ -202,9 +202,18 @@ button:disabled { opacity: 0.6; }
 .level-4 { background: var(--en); }
 .calendar-legend { display: flex; align-items: center; justify-content: flex-end; gap: 3px; font-size: 11px; color: var(--sub); margin-top: 8px; }
 .calendar-legend i { width: 10px; }
-.said { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
-.said li { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--en); border-radius: 10px; padding: 8px 12px; }
+.said { list-style: none; margin: 10px 0 0; padding: 0; }
+.said li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.said li .sub { text-align: right; }
 .today-counts { margin: 24px 0 16px; font-size: 14px; color: var(--sub); }
 .today-counts b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .today-counts .sub { display: inline; }
 .search { width: 100%; min-height: 44px; margin: -4px 0 12px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 16px; }
+.tests { display: grid; gap: 14px; font-size: 14px; }
+.tests-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.tests-title b { font-weight: 600; }
+.tests-title .sub { display: inline; }
+.tests-row svg { width: 100%; height: auto; display: block; }
+.chart .test-bar { fill: var(--sub); opacity: 0.35; }
+.chart .en-dot { fill: var(--en); }
+.chart text.faint { opacity: 0.6; }

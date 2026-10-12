@@ -14,6 +14,25 @@ public enum Growth {
         return firsts
     }
 
+    // Book に同じ英語の単語が2つあるときは、1語として数える(早く正解したほうを残す)
+    public static func distinct(_ firsts: [UUID: Date], words: [WordEntry]) -> [UUID: Date] {
+        let keys = Dictionary(uniqueKeysWithValues: words.map { ($0.id, WordEntry.key(for: $0.text(for: .english))) })
+        var kept: [String: (UUID, Date)] = [:]
+        for (id, date) in firsts {
+            let key = keys[id] ?? id.uuidString
+            if let current = kept[key], current.1 <= date { continue }
+            kept[key] = (id, date)
+        }
+        return Dictionary(uniqueKeysWithValues: kept.values.map { ($0.0, $0.1) })
+    }
+
+    // いちばん最近、英語のまま読んだ日と、その日の割合。今日まだ読んでいないときに見せる
+    public static func latestEnglish(_ events: [ActivityEvent], calendar: Calendar = .current) -> (day: Date, rate: Int)? {
+        guard let last = events.filter({ $0.kind == .glossRead }).max(by: { $0.date < $1.date }) else { return nil }
+        let report = DayReport(events: events, on: last.date, calendar: calendar)
+        return report.englishRate.map { (report.day, $0) }
+    }
+
     // その日に初めて正解した語。古い順
     public static func newlyCorrect(_ firsts: [UUID: Date], on day: Date, calendar: Calendar = .current) -> [UUID] {
         firsts.filter { calendar.isDate($0.value, inSameDayAs: day) }.sorted { $0.value < $1.value }.map(\.key)
@@ -51,6 +70,65 @@ public enum Growth {
     }
 }
 
+// テストの種類ごとの推移。単語のテストは正答率、文のテストは点で、どちらも 0〜100
+public enum TestTrend: String, CaseIterable, Identifiable, Sendable {
+    case choice
+    case word
+    case meaning
+    case writing
+    case reading
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .choice: ChoiceQuiz.title
+        case .word: ActivityKind.wordQuiz.label
+        case .meaning: ActivityKind.meaningQuiz.label
+        case .writing: ActivityKind.writing.label
+        case .reading: ActivityKind.reading.label
+        }
+    }
+
+    // 単語のテストは「何問中何問」を足し合わせた正答率、文のテストは点の平均
+    public var unit: String { isWordTest ? "%" : "pts" }
+    var isWordTest: Bool { self == .choice || self == .word || self == .meaning }
+
+    public func matches(_ event: ActivityEvent) -> Bool {
+        switch self {
+        case .choice: ActivityKind.wordTests.contains(event.kind) && event.isChoiceTest
+        case .word: event.kind == .wordQuiz && !event.isChoiceTest
+        case .meaning: event.kind == .meaningQuiz && !event.isChoiceTest
+        case .writing: event.kind == .writing
+        case .reading: event.kind == .reading
+        }
+    }
+
+    public func value(of events: [ActivityEvent]) -> Double? {
+        let mine = events.filter(matches)
+        if isWordTest {
+            let total = mine.compactMap(\.total).reduce(0, +)
+            return total == 0 ? nil : Double(mine.compactMap(\.score).reduce(0, +)) * 100 / Double(total)
+        }
+        let scores = mine.compactMap(\.score)
+        return scores.isEmpty ? nil : Double(scores.reduce(0, +)) / Double(scores.count)
+    }
+
+    // 日ごとの値。テストをしていない日は入れない
+    public func series(_ events: [ActivityEvent], days count: Int, until day: Date, calendar: Calendar = .current) -> [DailyValue] {
+        ProgressSeries.dailyAggregate(events.filter(matches), days: count, until: day, calendar: calendar) { value(of: $0) }
+    }
+
+    // 日ごとの回数。やっていない日は 0
+    public func counts(_ events: [ActivityEvent], days count: Int, until day: Date, calendar: Calendar = .current) -> [DailyValue] {
+        Growth.dailyCounts(events.filter(matches), days: count, until: day, calendar: calendar)
+    }
+
+    public func count(_ events: [ActivityEvent], since: Date) -> Int {
+        events.filter { matches($0) && $0.date >= since }.count
+    }
+}
+
 // Report の画面と同じ並びの Markdown。Slack などに貼る用
 public struct GrowthReport: Sendable {
     public static let days = 14
@@ -67,8 +145,8 @@ public struct GrowthReport: Sendable {
 
     public func markdown(calendar: Calendar = .current) -> String {
         let report = DayReport(events: events, on: now, calendar: calendar)
-        let said = Growth.firstCorrect(events, choice: false)
-        let seen = Growth.firstCorrect(events, choice: true)
+        let said = Growth.distinct(Growth.firstCorrect(events, choice: false), words: words)
+        let seen = Growth.distinct(Growth.firstCorrect(events, choice: true), words: words)
         let today = Growth.newlyCorrect(said, on: now, calendar: calendar)
         var lines = ["# Gloss Report: \(LessonBrief.dateText(now, calendar: calendar)) (\(Self.weekday(now, calendar: calendar)))"]
         let streak = events.streak(until: now, calendar: calendar)
@@ -96,9 +174,13 @@ public struct GrowthReport: Sendable {
         }
 
         let since = calendar.date(byAdding: .day, value: 1 - Self.days, to: calendar.startOfDay(for: now))!
-        let scores = Growth.writingScores(events, since: since)
-        if let last = Growth.movingAverage(scores).last {
-            lines += ["", "## Writing Test", "\(scores.count) tests in the last \(Self.days) days, average of the last 5: \(Int(last.rounded())) pts"]
+        let recent = events.filter { $0.date >= since }
+        let testLines = TestTrend.allCases.compactMap { test -> String? in
+            guard let value = test.value(of: recent) else { return nil }
+            return "- \(test.label): \(test.count(events, since: since)) times, \(Int(value.rounded()))\(test.unit == "%" ? "% correct" : " pts on average")"
+        }
+        if !testLines.isEmpty {
+            lines += ["", "## Tests (last \(Self.days) days)"] + testLines
         }
 
         let tests = report.events.filter { ActivityKind.wordTests.contains($0.kind) }.count

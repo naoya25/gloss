@@ -13,10 +13,10 @@ struct ReportOverview: View {
     var body: some View {
         let events = activity.state.events
         let report = activity.report()
-        let said = Growth.firstCorrect(events, choice: false)
-        let seen = Growth.firstCorrect(events, choice: true)
+        let said = Growth.distinct(Growth.firstCorrect(events, choice: false), words: words.state.words)
+        let seen = Growth.distinct(Growth.firstCorrect(events, choice: true), words: words.state.words)
         let earliest = events.map(\.date).min()
-        let days = (isSnapshot ? .twoWeeks : range).days(since: earliest, until: .now)
+        let days = Self.visibleDays((isSnapshot ? .twoWeeks : range).days(since: earliest, until: .now), since: earliest)
         VStack(alignment: .leading, spacing: 32) {
             HStack(alignment: .firstTextBaseline) {
                 Text(report.day, format: .dateTime.month().day().weekday())
@@ -30,7 +30,7 @@ struct ReportOverview: View {
                 }
             }
             HStack(alignment: .top, spacing: 16) {
-                EnglishHero(report: report)
+                EnglishHero(report: report, latest: Growth.latestEnglish(events))
                 WordsHero(said: said, seen: seen)
                     .frame(maxWidth: 300)
             }
@@ -54,38 +54,53 @@ struct ReportOverview: View {
                     if english.isEmpty {
                         EmptyChart(text: "Translate English and choose “Read It As Is” to see this grow.")
                     } else {
-                        EnglishChart(data: english)
+                        EnglishChart(data: english, domain: Self.domain(days: days))
                     }
                 }
-                HStack(alignment: .top, spacing: 16) {
-                    GrowthCard(title: "Words you can say", claim: "Words you got right in a test for the first time, added up.") {
-                        if said.isEmpty && seen.isEmpty {
-                            EmptyChart(text: "Take a test to see this grow.")
-                        } else {
-                            WordsChart(
-                                said: Growth.cumulative(said, days: days, until: .now),
-                                seen: Growth.cumulative(seen, days: days, until: .now)
-                            )
-                        }
-                    }
-                    let since = Calendar.current.date(byAdding: .day, value: 1 - days, to: Calendar.current.startOfDay(for: .now))!
-                    let scores = Growth.writingScores(events, since: since)
-                    GrowthCard(title: "Writing Test", claim: "Each score, and the average of the last 5.") {
-                        if scores.isEmpty {
-                            EmptyChart(text: "Take a Writing Test to see your scores.")
-                        } else {
-                            WritingChart(scores: scores)
-                        }
+                GrowthCard(title: "Words you can say", claim: "Words you got right in a test for the first time, added up.") {
+                    if said.isEmpty && seen.isEmpty {
+                        EmptyChart(text: "Take a test to see this grow.")
+                    } else {
+                        WordsChart(
+                            said: Growth.cumulative(said, days: days, until: .now),
+                            seen: Growth.cumulative(seen, days: days, until: .now),
+                            domain: Self.domain(days: days)
+                        )
                     }
                 }
+                TestsCard(events: events, days: days, domain: Self.domain(days: days))
                 GrowthCard(title: "Study days", claim: "The days you studied, and how much. Darker means more.") {
-                    StudyCalendar(counts: Growth.dailyCounts(events, days: StudyCalendar.weeks * 7, until: .now))
+                    let weeks = StudyCalendar.weeks(since: earliest)
+                    StudyCalendar(weeks: weeks, counts: Growth.dailyCounts(events, days: weeks * 7, until: .now))
                 }
             }
             SaidToday(ids: Growth.newlyCorrect(said, on: .now))
             TodayCounts(report: report, totalPoints: Points.total(events))
         }
     }
+}
+
+extension ReportOverview {
+    // 始めたばかりで記録が期間より短いときは、始めた日から見せる(最短 7 日)。そうしないとグラフの大半が空になる
+    static func visibleDays(_ days: Int, since earliest: Date?) -> Int {
+        guard let earliest else { return days }
+        let calendar = Calendar.current
+        let span = (calendar.dateComponents([.day], from: calendar.startOfDay(for: earliest), to: calendar.startOfDay(for: .now)).day ?? 0) + 1
+        return min(days, max(7, span))
+    }
+
+    // 1日しか記録が無くても、横軸は選んだ期間の日付にする。そうしないと1日の中の時刻が軸に出る
+    static func domain(days: Int) -> ClosedRange<Date> {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let start = calendar.date(byAdding: .day, value: 1 - days, to: today)!
+        return start...calendar.date(byAdding: .hour, value: 12, to: today)!
+    }
+}
+
+enum GrowthStyle {
+    // 目盛りの線は細い実線にして、データより目立たせない(点線は雑音になる)
+    static let grid = StrokeStyle(lineWidth: 0.5)
 }
 
 enum GrowthColor {
@@ -158,6 +173,7 @@ private struct HeroNumber: View {
 // 訳の中の英語と日本語の割合を横棒で見せる。青が伸びていくのが Gloss の進み方
 private struct EnglishHero: View {
     let report: DayReport
+    let latest: (day: Date, rate: Int)?
 
     var body: some View {
         HeroCard(label: "Read in English") {
@@ -185,6 +201,12 @@ private struct EnglishHero: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            } else if let latest {
+                HeroNumber(value: "\(latest.rate)", unit: "%")
+                    .foregroundStyle(.secondary)
+                Text("On \(latest.day.formatted(.dateTime.month().day())), the last day you read in English. Nothing yet today.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             } else {
                 HeroNumber(value: "–")
                 Text("Translate English and choose “Read It As Is” to start.")
@@ -216,6 +238,7 @@ private struct WordsHero: View {
 
 private struct EnglishChart: View {
     let data: [DailyValue]
+    let domain: ClosedRange<Date>
     @State private var selected: Date?
 
     var body: some View {
@@ -240,8 +263,12 @@ private struct EnglishChart: View {
             }
         }
         .chartYScale(domain: 0...top)
+        .chartXScale(domain: domain)
+        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+            AxisValueLabel(format: .dateTime.month(.defaultDigits).day())
+        } }
         .chartYAxis { AxisMarks(values: .stride(by: 5)) { value in
-            AxisGridLine()
+            AxisGridLine(stroke: GrowthStyle.grid)
             AxisValueLabel { Text("\(value.as(Int.self) ?? 0)%") }
         } }
         .chartXSelection(value: $selected)
@@ -251,6 +278,7 @@ private struct EnglishChart: View {
 private struct WordsChart: View {
     let said: [DailyValue]
     let seen: [DailyValue]
+    let domain: ClosedRange<Date>
     @State private var selected: Date?
 
     var body: some View {
@@ -282,40 +310,126 @@ private struct WordsChart: View {
             }
         }
         .chartForegroundStyleScale(domain: series.map(\.0), range: series.map(\.2))
+        .chartXScale(domain: domain)
+        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+            AxisValueLabel(format: .dateTime.month(.defaultDigits).day())
+        } }
+        // 線の右端に数字を直接書くので、目盛りは左に置いて重ならないようにする
+        .chartYAxis { AxisMarks(position: .leading) { _ in
+            AxisGridLine(stroke: GrowthStyle.grid)
+            AxisValueLabel()
+        } }
         .chartLegend(position: .top, alignment: .leading)
         .chartXSelection(value: $selected)
     }
 }
 
-// 点は1回ずつの点数、線は直近5回の平均。1回の上下より、線の向きを見る
-private struct WritingChart: View {
-    let scores: [Int]
-    @State private var selected: Int?
+// テストごとに1つのグラフ。棒がその日にやった回数(右の目盛り)、線がその日の成績(左の目盛り、0〜100)。
+// 回数と成績は単位が違うので、目盛りを左右に分けて両方に書く
+private struct TestsCard: View {
+    let events: [ActivityEvent]
+    let days: Int
+    let domain: ClosedRange<Date>
 
     var body: some View {
-        let average = Growth.movingAverage(scores)
-        Chart {
-            ForEach(Array(scores.enumerated()), id: \.offset) { index, score in
-                PointMark(x: .value("Test", index + 1), y: .value("Score", score))
-                    .foregroundStyle(Color.secondary.opacity(0.6))
-                    .symbolSize(30)
+        let since = Calendar.current.date(byAdding: .day, value: 1 - days, to: Calendar.current.startOfDay(for: .now))!
+        let recent = events.filter { $0.date >= since }
+        let counts = TestTrend.allCases.map { $0.counts(events, days: days, until: .now) }
+        let maxCount = max(1, counts.flatMap { $0.map(\.value) }.max() ?? 1)
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Tests").font(.headline)
+            Text("Bars: how many times you took it that day (right scale). Line: how you did that day (left scale) — share correct for word tests, average score for Writing and Reading.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(TestTrend.allCases.enumerated()), id: \.offset) { index, test in
+                    let value = test.value(of: recent)
+                    let count = test.count(events, since: since)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(test.label).font(.body.weight(.semibold))
+                            Spacer()
+                            Text(value.map { "\(count)× · \(Int($0.rounded()))\(test.unit == "%" ? "%" : " pts")" } ?? "Not taken yet")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        // 日付の目盛りは一番下の行だけに書く。5行とも同じ日付なので
+                        let isLast = index == TestTrend.allCases.count - 1
+                        TestComboChart(
+                            counts: counts[index],
+                            results: test.series(events, days: days, until: .now),
+                            domain: domain,
+                            top: maxCount,
+                            unit: test.unit,
+                            showsDates: isLast
+                        )
+                        .frame(height: isLast ? 92 : 72)
+                    }
+                }
             }
-            ForEach(Array(average.enumerated()), id: \.offset) { index, value in
-                LineMark(x: .value("Test", index + 1), y: .value("Average", value))
+            .padding(.top, 12)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.separator))
+    }
+}
+
+// 回数は 0〜top を 0〜100 に縮めて同じ枠に描き、右の目盛りで元の回数に読み替える。どのテストも同じ top にして、回数を比べられるようにする
+private struct TestComboChart: View {
+    let counts: [DailyValue]
+    let results: [DailyValue]
+    let domain: ClosedRange<Date>
+    let top: Double
+    let unit: String
+    let showsDates: Bool
+    @State private var selected: Date?
+
+    var body: some View {
+        let done = counts.filter { $0.value > 0 }
+        Chart {
+            ForEach(done, id: \.day) { item in
+                BarMark(x: .value("Day", item.day, unit: .day), y: .value("Times", item.value / top * 100))
+                    .foregroundStyle(Color.secondary.opacity(0.35))
+                    .cornerRadius(2)
+            }
+            ForEach(results, id: \.day) { item in
+                LineMark(x: .value("Day", item.day, unit: .day), y: .value("Result", item.value))
                     .foregroundStyle(GrowthColor.english)
                     .lineStyle(StrokeStyle(lineWidth: 2))
+                PointMark(x: .value("Day", item.day, unit: .day), y: .value("Result", item.value))
+                    .foregroundStyle(GrowthColor.english)
+                    .symbolSize(24)
             }
-            if let selected, scores.indices.contains(selected - 1) {
-                RuleMark(x: .value("Test", selected))
+            if let selected, let day = (done.map(\.day) + results.map(\.day)).min(by: { abs($0.timeIntervalSince(selected)) < abs($1.timeIntervalSince(selected)) }) {
+                let times = Int(done.first { $0.day == day }?.value ?? 0)
+                let result = results.first { $0.day == day }?.value
+                RuleMark(x: .value("Day", day, unit: .day))
                     .foregroundStyle(.secondary.opacity(0.4))
                     .annotation(position: .top, overflowResolution: .init(x: .fit, y: .disabled)) {
-                        ChartTip(title: "Test \(selected)", value: "\(scores[selected - 1]) pts · avg \(Int(average[selected - 1].rounded()))")
+                        ChartTip(
+                            title: day.formatted(.dateTime.month().day()),
+                            value: "\(times)× · " + (result.map { "\(Int($0.rounded()))\(unit == "%" ? "%" : " pts")" } ?? "–")
+                        )
                     }
             }
         }
         .chartYScale(domain: 0...100)
-        .chartXScale(domain: 1...max(scores.count, 2))
-        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
+        .chartXScale(domain: domain)
+        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+            if showsDates { AxisValueLabel(format: .dateTime.month(.defaultDigits).day()) }
+        } }
+        .chartYAxis {
+            AxisMarks(position: .leading, values: [0, 50, 100]) { value in
+                AxisGridLine(stroke: GrowthStyle.grid)
+                AxisValueLabel { Text("\(value.as(Int.self) ?? 0)\(unit == "%" ? "%" : "")") }
+            }
+            AxisMarks(position: .trailing, values: [0, 50, 100]) { value in
+                AxisValueLabel { Text("\(Int(((value.as(Double.self) ?? 0) / 100 * top).rounded()))×").foregroundStyle(.tertiary) }
+            }
+        }
         .chartXSelection(value: $selected)
     }
 }
@@ -338,25 +452,32 @@ private struct ChartTip: View {
 
 // やった日のカレンダー。列が週、行が曜日。濃さは記録の数を5段にしたもの(一つの色の濃さだけで量を表す)
 private struct StudyCalendar: View {
-    static let weeks = 26
+    let weeks: Int
     let counts: [DailyValue]
+
+    // 始めた週から今週まで。空の週ばかりが並ばないよう、最初のうちは8週だけ見せ、多くても26週まで
+    static func weeks(since earliest: Date?) -> Int {
+        guard let earliest else { return 8 }
+        let days = Calendar.current.dateComponents([.day], from: earliest, to: .now).day ?? 0
+        return min(26, max(8, days / 7 + 2))
+    }
 
     var body: some View {
         let calendar = Calendar.current
         let byDay = Dictionary(uniqueKeysWithValues: counts.map { ($0.day, $0.value) })
         let today = calendar.startOfDay(for: .now)
         let lastSunday = calendar.date(byAdding: .day, value: -(calendar.component(.weekday, from: today) - 1), to: today)!
-        let start = calendar.date(byAdding: .day, value: -7 * (Self.weeks - 1), to: lastSunday)!
-        VStack(alignment: .trailing, spacing: 8) {
+        let start = calendar.date(byAdding: .day, value: -7 * (weeks - 1), to: lastSunday)!
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 4) {
-                ForEach(0..<Self.weeks, id: \.self) { week in
+                ForEach(0..<weeks, id: \.self) { week in
                     VStack(spacing: 4) {
                         ForEach(0..<7, id: \.self) { weekday in
                             let day = calendar.date(byAdding: .day, value: week * 7 + weekday, to: start)!
                             let count = Int(byDay[day] ?? 0)
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(day > today ? Color.clear : Self.color(for: count))
-                                .aspectRatio(1, contentMode: .fit)
+                                .frame(width: 18, height: 18)
                                 .help(day > today ? "" : "\(day.formatted(.dateTime.month().day())): \(count == 0 ? "no study" : "\(count) records")")
                         }
                     }
@@ -402,21 +523,17 @@ private struct SaidToday: View {
                     .foregroundStyle(.tertiary)
                     .padding(.top, 8)
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 8)], spacing: 8) {
+                // 単語帳の一覧のように、英語と日本語を1行ずつ並べる。枠で囲まず、細い線で区切る
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 32), GridItem(.flexible(), spacing: 32)], alignment: .leading, spacing: 0) {
                     ForEach(entries) { entry in
-                        VStack(alignment: .leading, spacing: 2) {
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text(entry.text(for: .english)).font(.body.weight(.semibold))
+                            Spacer(minLength: 8)
                             Text(entry.text(for: .japanese)).font(.callout).foregroundStyle(.secondary)
                         }
                         .lineLimit(1)
-                        .padding(.horizontal, 12)
                         .padding(.vertical, 9)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
-                        .overlay(alignment: .leading) {
-                            UnevenRoundedRectangle(topLeadingRadius: 10, bottomLeadingRadius: 10).fill(GrowthColor.english).frame(width: 3)
-                        }
-                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
+                        .overlay(alignment: .bottom) { Divider() }
                     }
                 }
                 .padding(.top, 8)

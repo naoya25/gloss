@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { cumulative, dailyCounts, countOn, englishRates, firstCorrect, movingAverage, newlyCorrect, writingScores } from "../../core/growth";
+import { TEST_TRENDS, testCounts, visibleDays, cumulative, dailyCounts, countOn, distinct, englishRates, firstCorrect, formatTest, latestEnglish, matchesTest, newlyCorrect, testSeries, testValue } from "../../core/growth";
 import { lessonBrief } from "../../core/lessonBrief";
+import type { ActivityEvent } from "../../core/models";
 import { countKind, englishRate, eventsOn, lastDays, totalPoints, streak } from "../../core/report";
 import { reportImage, reportMarkdown, type ShareSummary } from "../../core/reportCard";
 import { useActivity } from "../../stores/activity";
@@ -23,16 +24,17 @@ export function ReportPage() {
   const now = new Date();
   const today = eventsOn(events, now);
   const days = streak(events);
-  const said = firstCorrect(events, false);
-  const seen = firstCorrect(events, true);
+  const said = distinct(firstCorrect(events, false), words);
+  const seen = distinct(firstCorrect(events, true), words);
+  const latest = latestEnglish(events);
   const saidToday = newlyCorrect(said, now);
   const seenOnly = [...seen.keys()].filter((id) => !said.has(id)).length;
   const reads = today.filter((event) => event.kind === "glossRead");
   const english = reads.reduce((sum, event) => sum + (event.score ?? 0), 0);
   const translated = reads.reduce((sum, event) => sum + (event.total ?? 0), 0);
   const rate = englishRate(today);
-  const rangeDays = lastDays(range, now);
-  const scores = writingScores(events, rangeDays[0]!);
+  const rangeDays = lastDays(visibleDays(range, events, now), now);
+  const recent = events.filter((event) => Date.parse(event.date) >= rangeDays[0]!.getTime());
   const byID = new Map(words.map((word) => [word.id, word]));
 
   return (
@@ -47,7 +49,11 @@ export function ReportPage() {
           <span className="label">Read in English</span>
           <strong>{rate === null ? "–" : <>{rate}<small>%</small></>}</strong>
           {rate === null ? (
-            <span className="sub">Translate on the Mac and choose “Read It As Is” to start.</span>
+            <span className="sub">
+              {latest
+                ? `${latest.rate}% on ${md(latest.day)}, the last day you read in English. Nothing yet today.`
+                : "Translate on the Mac and choose “Read It As Is” to start."}
+            </span>
           ) : (
             <>
               <span className="sub">How much of today's translations stayed in English · {reads.length} texts</span>
@@ -95,11 +101,11 @@ export function ReportPage() {
           min={10}
         />
       </Card>
-      <Card title="Writing Test" claim="Each score, and the average of the last 5. (Writing Test is on the Mac.)">
-        {scores.length ? <WritingChart scores={scores} /> : <p className="empty">No Writing Tests in this range.</p>}
+      <Card title="Tests" claim="Bars: times a day. Line: how you did that day (share correct for word tests, average score for Writing and Reading).">
+        <TestsChart events={events} recent={recent} days={rangeDays} />
       </Card>
       <Card title="Study days" claim="The days you studied, and how much. Darker means more.">
-        <StudyCalendar counts={dailyCounts(events)} today={now} />
+        <StudyCalendar counts={dailyCounts(events)} today={now} weeks={calendarWeeks(events, now)} />
       </Card>
 
       <h2>Words you said today</h2>
@@ -211,44 +217,101 @@ function LineChart({ days, series, unit, min }: { days: Date[]; series: Series[]
   );
 }
 
-// 点は1回ずつの点数、線は直近5回の平均。1回の上下より、線の向きを見る
-function WritingChart({ scores }: { scores: number[] }) {
-  const width = 320;
-  const height = 130;
-  const pad = { l: 28, r: 8, t: 10, b: 18 };
-  const average = movingAverage(scores);
-  const x = (i: number) => pad.l + (i * (width - pad.l - pad.r)) / Math.max(1, scores.length - 1);
-  const y = (v: number) => height - pad.b - (v / 100) * (height - pad.t - pad.b);
+// テストごとに1つのグラフ。棒がその日にやった回数(右の目盛り)、線がその日の成績(左の目盛り、0〜100)。
+// 回数は 0〜top を同じ枠の高さに縮めて描く。どのテストも同じ top にして、回数を比べられるようにする
+function TestsChart({ events, recent, days }: { events: ActivityEvent[]; recent: ActivityEvent[]; days: Date[] }) {
+  const counts = TEST_TRENDS.map((test) => testCounts(test, events, days));
+  const top = Math.max(1, ...counts.flat());
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Writing Test scores: ${scores.join(", ")}`}>
-      {[0, 50, 100].map((g) => (
-        <g key={g}>
-          <line className="grid" x1={pad.l} x2={width - pad.r} y1={y(g)} y2={y(g)} />
-          <text x={pad.l - 4} y={y(g) + 3} textAnchor="end">
-            {g}
-          </text>
-        </g>
-      ))}
-      {scores.map((score, i) => (
-        <circle key={i} className="dot" cx={x(i)} cy={y(score)} r={3}>
-          <title>{`Test ${i + 1}: ${score} pts`}</title>
-        </circle>
-      ))}
-      <polyline className="line en-stroke" fill="none" points={average.map((v, i) => `${x(i)},${y(v)}`).join(" ")} />
-    </svg>
+    <div className="tests">
+      {TEST_TRENDS.map((test, i) => {
+        const value = testValue(test, recent);
+        const count = recent.filter((event) => matchesTest(test, event)).length;
+        return (
+          <div key={test.id} className="tests-row">
+            <div className="tests-title">
+              <b>{test.label}</b>
+              <span className="sub">{value === null ? "Not yet" : `${count}× · ${formatTest(test, value)}`}</span>
+            </div>
+            {/* 日付の目盛りは一番下の行だけに書く。5行とも同じ日付なので */}
+            <ComboChart days={days} counts={counts[i]!} results={testSeries(test, events, days)} top={top} unit={test.unit === "%" ? "%" : ""} showsDates={i === TEST_TRENDS.length - 1} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ComboChart(props: { days: Date[]; counts: number[]; results: (number | null)[]; top: number; unit: string; showsDates: boolean }) {
+  const { days, counts, results, top, unit, showsDates } = props;
+  const [picked, setPicked] = useState<number | null>(null);
+  const width = 320;
+  const height = showsDates ? 92 : 74;
+  const pad = { l: 30, r: 26, t: 8, b: showsDates ? 18 : 4 };
+  const inner = width - pad.l - pad.r;
+  const step = inner / days.length;
+  const x = (i: number) => pad.l + step * (i + 0.5);
+  const y = (v: number) => height - pad.b - (v / 100) * (height - pad.t - pad.b);
+  const points = results.flatMap((v, i) => (v === null ? [] : [[x(i), y(v)] as const]));
+  const every = Math.ceil(days.length / 5);
+  return (
+    <>
+      <p className="chart-tip">
+        {picked === null
+          ? " "
+          : `${md(days[picked]!)} · ${counts[picked]}× · ${results[picked] === null ? "–" : Math.round(results[picked]!) + (unit || " pts")}`}
+      </p>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Times a day and results">
+        {[0, 50, 100].map((g) => (
+          <g key={g}>
+            <line className="grid" x1={pad.l} x2={width - pad.r} y1={y(g)} y2={y(g)} />
+            <text x={pad.l - 4} y={y(g) + 3} textAnchor="end">
+              {g}
+              {unit}
+            </text>
+            <text className="faint" x={width - pad.r + 4} y={y(g) + 3}>
+              {Math.round((g / 100) * top)}×
+            </text>
+          </g>
+        ))}
+        {counts.map((v, i) =>
+          v === 0 ? null : <rect key={i} className="test-bar" x={x(i) - step * 0.35} y={y((v / top) * 100)} width={step * 0.7} height={y(0) - y((v / top) * 100)} rx={1.5} />,
+        )}
+        <polyline className="line en-stroke" fill="none" points={points.map((p) => p.join(",")).join(" ")} />
+        {points.map(([px, py], i) => (
+          <circle key={i} className="en-dot" cx={px} cy={py} r={3} />
+        ))}
+        {days.map((day, i) => (
+          <g key={i}>
+            {showsDates && (days.length - 1 - i) % every === 0 && (
+              <text x={x(i)} y={height - 4} textAnchor="middle">
+                {md(day)}
+              </text>
+            )}
+            <rect x={x(i) - step / 2} y={pad.t} width={step} height={height - pad.t - pad.b} fill="transparent" onClick={() => setPicked(i)} onMouseEnter={() => setPicked(i)} />
+          </g>
+        ))}
+      </svg>
+    </>
   );
 }
 
 // やった日のカレンダー。列が週、行が曜日。濃さは記録の数を5段にしたもの
-function StudyCalendar({ counts, today }: { counts: Map<string, number>; today: Date }) {
-  const weeks = 15;
+// 始めた週から今週まで。空の週ばかりが並ばないよう、最初のうちは8週だけ見せ、多くても15週まで
+function calendarWeeks(events: { date: string }[], today: Date): number {
+  if (!events.length) return 8;
+  const first = Math.min(...events.map((event) => Date.parse(event.date)));
+  return Math.min(15, Math.max(8, Math.floor((today.getTime() - first) / (7 * 86_400_000)) + 2));
+}
+
+function StudyCalendar({ counts, today, weeks }: { counts: Map<string, number>; today: Date; weeks: number }) {
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const start = new Date(end);
   start.setDate(end.getDate() - end.getDay() - 7 * (weeks - 1));
   const level = (n: number) => (n === 0 ? 0 : n < 30 ? 1 : n < 60 ? 2 : n < 100 ? 3 : 4);
   return (
     <>
-      <div className="calendar">
+      <div className="calendar" style={{ gridTemplateColumns: `repeat(${weeks}, minmax(0, 20px))` }}>
         {Array.from({ length: weeks }, (_, week) => (
           <div key={week}>
             {Array.from({ length: 7 }, (_, weekday) => {
