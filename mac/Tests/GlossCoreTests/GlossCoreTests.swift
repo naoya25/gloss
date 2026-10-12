@@ -509,3 +509,20 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     #expect(MixedTranslation.englishParts(of: "I'll push back on it.") == "I'll push back on it")
     #expect(MixedTranslation.englishParts(of: "日本語だけ") == nil)
 }
+
+@Test func questionWeightsFavorUnlearnedAndStaleWords() {
+    let now = Date(timeIntervalSince1970: 1_791_800_000)
+    func card(_ mastery: Mastery, daysAgo: Double?) -> WordEntry {
+        var word = WordEntry(term: "w", note: "", context: "")
+        word.english = "w"
+        word.japanese = "ダブリュー"
+        word.mastery = mastery
+        word.lastReviewed = daysAgo.map { now.addingTimeInterval(-$0 * 86_400) }
+        return word
+    }
+    #expect(WordQuiz.weight(of: card(.notYet, daysAgo: 0), now: now) == 6)
+    #expect(WordQuiz.weight(of: card(.known, daysAgo: 7), now: now) == 2)
+    let words = (0..<20).map { _ in card(.known, daysAgo: 0) } + (0..<20).map { _ in card(.notYet, daysAgo: 0) }
+    let known = (0..<200).map { _ in WordQuiz.pick(from: words, now: now).filter { $0.masteryLevel == .known }.count }.reduce(0, +)
+    #expect(known > 0 && known < 1_000)
+}

@@ -3,7 +3,7 @@ import { cumulative, firstCorrect, movingAverage, newlyCorrect } from "./growth"
 import { isoSeconds, newID } from "./ids";
 import { Mastery, type ActivityEvent, type WordEntry } from "./models";
 import { lessonBrief } from "./lessonBrief";
-import { choiceOptions, isExactAnswer, nextMastery, pickQuestions } from "./quiz";
+import { choiceOptions, isExactAnswer, nextMastery, pickQuestions, questionWeight } from "./quiz";
 import { bookSize, lastDays, quizTotals, streak } from "./report";
 import { pickVoice } from "./speech";
 import { activityRow, didPushWords, mergeActivity, mergeWords, wordRows } from "./sync";
@@ -102,6 +102,19 @@ describe("pickQuestions", () => {
     const next = pickQuestions(words, 10, new Set(first.map((w) => w.id)));
     expect(next).toHaveLength(10);
     expect(next.some((w) => first.includes(w))).toBe(false);
+  });
+  it("weights not-yet and long-unseen words higher, but known words can still appear", () => {
+    const now = Date.UTC(2026, 9, 12);
+    const day = (ago: number) => new Date(now - ago * 86_400_000).toISOString();
+    expect(questionWeight(word({ mastery: Mastery.NotYet, lastReviewed: day(0) }), now)).toBe(6);
+    expect(questionWeight(word({ mastery: Mastery.Known, lastReviewed: day(7) }), now)).toBe(2);
+    expect(questionWeight(word({ mastery: Mastery.Unsure }), now)).toBeCloseTo(3 * (1 + 30 / 7));
+    const known = Array.from({ length: 20 }, (_, i) => word({ term: `k${i}`, mastery: Mastery.Known, lastReviewed: day(0) }));
+    const notYet = Array.from({ length: 20 }, (_, i) => word({ term: `n${i}`, mastery: Mastery.NotYet, lastReviewed: day(0) }));
+    let knownPicked = 0;
+    for (let i = 0; i < 200; i++) knownPicked += pickQuestions([...known, ...notYet], 10, new Set(), now).filter((w) => w.mastery === Mastery.Known).length;
+    expect(knownPicked).toBeGreaterThan(0);
+    expect(knownPicked).toBeLessThan(200 * 5);
   });
   it("reuses recent words only when there are not enough others", () => {
     const words = Array.from({ length: 12 }, (_, i) => word({ term: `w${i}` }));

@@ -23,14 +23,29 @@ public enum ExerciseKind: String, CaseIterable, Sendable {
 public enum WordQuiz {
     public static let questionCount = 10
 
-    // 覚えていない単語と、しばらく見ていない単語から先に出す
-    public static func pick(from words: [WordEntry], count: Int = questionCount) -> [WordEntry] {
-        let candidates = words.filter(\.hasCardPair)
-        let ordered = candidates.sorted { a, b in
-            if a.masteryLevel != b.masteryLevel { return a.masteryLevel.rawValue < b.masteryLevel.rawValue }
-            return (a.lastReviewed ?? .distantPast) < (b.lastReviewed ?? .distantPast)
+    // 重みつきで選ぶ。覚えていない単語と、しばらく見ていない単語ほど出やすいが、✓ の単語も時々は出る
+    public static func pick(from words: [WordEntry], count: Int = questionCount, now: Date = .now) -> [WordEntry] {
+        var random = SystemRandomNumberGenerator()
+        return pick(from: words, count: count, now: now, using: &random)
+    }
+
+    public static func pick<G: RandomNumberGenerator>(from words: [WordEntry], count: Int, now: Date, using random: inout G) -> [WordEntry] {
+        // 重みに比例して、重ならないように引く(Efraimidis & Spirakis 2006 の、乱数 u の 1/重み 乗が大きい順に取る方法)
+        let keyed = words.filter(\.hasCardPair).map { word in
+            (word, pow(Double.random(in: Double.ulpOfOne..<1, using: &random), 1 / weight(of: word, now: now)))
         }
-        return Array(ordered.prefix(count * 2)).shuffled().prefix(count).map { $0 }
+        return keyed.sorted { $0.1 > $1.1 }.prefix(count).map(\.0)
+    }
+
+    // 印の重み(✕ 6・? 3・✓ 1)に、最後に見てからの日数の重み(今日 1 から 30 日で約 5.3 まで)を掛ける。一度も見ていない単語は 30 日とみなす
+    public static func weight(of word: WordEntry, now: Date) -> Double {
+        let mastery: Double = switch word.masteryLevel {
+        case .notYet: 6
+        case .unsure: 3
+        case .known: 1
+        }
+        let days = word.lastReviewed.map { max(0, now.timeIntervalSince($0) / 86_400) } ?? 30
+        return mastery * (1 + min(days, 30) / 7)
     }
 
     // 大文字小文字・前後の記号・空白の数の違いは間違いにしない。

@@ -3,21 +3,30 @@ import { millis } from "./ids";
 
 export const QUESTION_COUNT = 10;
 
-// 覚えていない単語と、しばらく見ていない単語から先に出す(Mac の WordQuiz.pick と同じ)。
+// 重みつきで選ぶ(Mac の WordQuiz.pick と同じ重み)。覚えていない単語と、しばらく見ていない単語ほど出やすいが、✓ の単語も時々は出る。
 // 直前のテストに出した単語は、ほかに出せる単語が足りないときだけ混ぜる
-export function pickQuestions(words: WordEntry[], count = QUESTION_COUNT, recent: Set<string> = new Set()): WordEntry[] {
+export function pickQuestions(
+  words: WordEntry[],
+  count = QUESTION_COUNT,
+  recent: Set<string> = new Set(),
+  now = Date.now(),
+  random: () => number = Math.random,
+): WordEntry[] {
   const candidates = words.filter(hasCardPair);
   const fresh = candidates.filter((word) => !recent.has(word.id));
-  const ordered = (fresh.length >= count ? fresh : candidates).sort((a, b) => {
-    const mastery = (a.mastery ?? 0) - (b.mastery ?? 0);
-    return mastery !== 0 ? mastery : millis(a.lastReviewed) - millis(b.lastReviewed);
-  });
-  const pool = ordered.slice(0, count * 2);
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j]!, pool[i]!];
-  }
-  return pool.slice(0, count);
+  // 重みに比例して、重ならないように引く(Efraimidis & Spirakis 2006 の、乱数 u の 1/重み 乗が大きい順に取る方法)
+  return (fresh.length >= count ? fresh : candidates)
+    .map((word) => ({ word, key: Math.pow(random() || Number.EPSILON, 1 / questionWeight(word, now)) }))
+    .sort((a, b) => b.key - a.key)
+    .slice(0, count)
+    .map(({ word }) => word);
+}
+
+// 印の重み(✕ 6・? 3・✓ 1)に、最後に見てからの日数の重み(今日 1 から 30 日で約 5.3 まで)を掛ける。一度も見ていない単語は 30 日とみなす
+export function questionWeight(word: WordEntry, now = Date.now()): number {
+  const mastery = word.mastery === Mastery.Known ? 1 : word.mastery === Mastery.Unsure ? 3 : 6;
+  const days = word.lastReviewed ? Math.max(0, (now - millis(word.lastReviewed)) / 86_400_000) : 30;
+  return mastery * (1 + Math.min(days, 30) / 7);
 }
 
 function normalizeEnglish(text: string): string {
