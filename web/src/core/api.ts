@@ -40,6 +40,11 @@ export function createApi(token: string) {
       const body = await send("/api/ai/word-test", { method: "POST", body: JSON.stringify({ direction, items }) });
       return body.grades;
     },
+    // 段落のまとまり1つを、5段階の訳の形で訳してもらう。返るのは AI の答えそのもの
+    async translate(text: string, known: string[]): Promise<string> {
+      const body = await send("/api/ai/translate", { method: "POST", body: JSON.stringify({ text, known }) });
+      return body.raw;
+    },
   };
 }
 

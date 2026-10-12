@@ -27,6 +27,60 @@ export async function gradeWordTest(request, env) {
   return json({ grades: parseGrades(text) });
 }
 
+// スマホの翻訳。英文の語句を全部「英語 | 日本語 | 難しさ」の形で書かせ、どこまで英語で読むかはスマホが決める。
+// 指示文は Mac の Prompts.gradedTranslation と同じにする。片方を変えたら、もう片方も変える。
+// 長い英文はスマホが段落ごとに分けて送るので、1回に受け取る長さは決めておく
+const MAX_SOURCE = 4000;
+const MAX_KNOWN = 300;
+
+export async function translateGraded(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "bad json" }, 400);
+  }
+  const text = body?.text;
+  const known = Array.isArray(body?.known) ? body.known : [];
+  if (typeof text !== "string" || !text.trim() || text.length > MAX_SOURCE) return json({ error: "bad text" }, 400);
+  if (known.length > MAX_KNOWN || !known.every((term) => typeof term === "string" && term.length <= 80)) return json({ error: "bad known" }, 400);
+  const response = await fetch(`https://api.japan-ai.co.jp/v1/chat/completions?userId=${encodeURIComponent(env.JAI_USER_ID)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.AI_KEY}` },
+    body: JSON.stringify({
+      model: env.AI_MODEL,
+      stream: false,
+      messages: [
+        { role: "system", content: gradedTranslationPrompt(known) },
+        { role: "user", content: text },
+      ],
+    }),
+  });
+  if (!response.ok) return json({ error: `ai ${response.status}` }, 502);
+  const result = await response.json();
+  return json({ raw: result?.choices?.[0]?.message?.content ?? "" });
+}
+
+export function gradedTranslationPrompt(known) {
+  const open = "⟦";
+  const close = "⟧";
+  let prompt = `あなたはプロの翻訳者です。入力の英文を、要約・省略せずに自然な日本語へ全文翻訳してください。出力は訳文のみとし、前置きや説明を含めないでください。
+ただし、英文の中の意味のある語句(名詞句・動詞句・形容詞・副詞・慣用表現。1〜4語程度)は、訳文の中で全部次の形で書いてください。英文の単語の7割以上が、この形のどれかに入るようにしてください。
+${open}<英文での表記> | <その部分の日本語訳> | <難しさ>${close}
+- 難しさは、日本人のソフトウェアエンジニアにとっての難しさを 1〜5 の整数で書いてください。1: 中学で習う語(meeting, check)、3: 仕事でよく見る語(deploy, deadline)、5: 難しい語や慣用表現(rule of thumb, mitigate)
+- 学習者はこの形の部分を英語のまま読むことがあります。英語のまま差し込んでも日本語の文として自然になるよう、前後の助詞や語順を整えてください(例: 「${open}hotfix | 緊急修正 | 3${close}を出しました」)
+- 動詞は原形(push, migrate)で書き、日本語訳は語幹だけ(プッシュ、移行)にして、「する」「しました」「している」などの活用は形の外に書いてください(例: 「${open}push | プッシュ | 2${close}しました」「${open}migrate | 移行 | 3${close}する予定です」)
+- 形容詞も同じく、「な」「に」は形の外に書いてください(例: 「${open}stable | 安定 | 2${close}な」)
+- 形の中の日本語と同じ言葉を、形の外で繰り返さないでください(誤: 「主な${open}main goal | 主な目標 | 2${close}」)
+- FYI・ASAP などの略語や挨拶も語句として囲んでください
+- 冠詞・前置詞・代名詞・be 動詞だけの部分は囲まず、普通に訳してください。製品名・人名・コード・URL は原文のままにし、囲まないでください
+- 入力の英文に無い内容を訳文に足さないでください
+入力が Markdown 記法を含む場合は記法を保ってください。
+`;
+  if (known.length) prompt += `\n# 学習者が覚えた表現(英文に出てきたら、必ずひとかたまりの語句として囲んでください)\n${known.map((term) => `- ${term}`).join("\n")}`;
+  return prompt;
+}
+
 function isValidItem(item) {
   return (
     Number.isInteger(item?.number) &&

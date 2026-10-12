@@ -217,3 +217,10 @@ button:disabled { opacity: 0.6; }
 .chart .test-bar { fill: var(--sub); opacity: 0.35; }
 .chart .en-dot { fill: var(--en); }
 .chart text.faint { opacity: 0.6; }
+.translate textarea { width: 100%; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 12px; font-size: 16px; line-height: 1.6; resize: vertical; }
+.translate .levels { display: flex; width: 100%; }
+.translate .levels button { flex: 1; }
+.translate .level-note { margin: 6px 0 12px; }
+.translation { white-space: pre-wrap; line-height: 1.9; font-size: 17px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.translation .kept { color: var(--en); font-weight: 600; }
+button.link { border: 0; background: transparent; color: var(--accent); font-size: 15px; min-height: 44px; }

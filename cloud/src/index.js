@@ -1,7 +1,7 @@
 // Gloss の単語帳と学習の記録を D1 に置く API。
 // 単語は1単語を1行で持ち、updated_at が新しい書き込みだけを受け入れる(後から書いたほうが勝つ)。
 // 記録は足すだけで、書き換えない
-import { gradeWordTest } from "./ai.js";
+import { gradeWordTest, translateGraded } from "./ai.js";
 
 const PAGE_SIZE = 500;
 const MAX_ROWS_PER_PUSH = 200;
@@ -25,6 +25,9 @@ export default {
     }
     if (url.pathname === "/api/ai/word-test" && request.method === "POST") {
       return gradeWordTest(request, env);
+    }
+    if (url.pathname === "/api/ai/translate" && request.method === "POST") {
+      return translateGraded(request, env);
     }
     return json({ error: "not found" }, 404);
   },

@@ -6,6 +6,7 @@ import { lessonBrief } from "./lessonBrief";
 import { choiceOptions, isExactAnswer, nextMastery, pickQuestions, questionWeight } from "./quiz";
 import { bookSize, lastDays, quizTotals, streak } from "./report";
 import { pickVoice } from "./speech";
+import { japaneseOf, joinGraded, parseGraded, phrasesOf, readingPoints, render, splitParts } from "./graded";
 import { matchesQuery, recallStreaks } from "./recall";
 import { sortWords } from "../pages/book/store";
 import { activityRow, didPushWords, mergeActivity, mergeWords, wordRows } from "./sync";
@@ -217,5 +218,33 @@ describe("recommended order and search", () => {
     expect(matchesQuery(entry, "ｒｕｌｅ")).toBe(true);
     expect(matchesQuery(entry, "目安")).toBe(true);
     expect(matchesQuery(entry, "deploy")).toBe(false);
+  });
+});
+
+describe("graded translation", () => {
+  const source = "FYI, I pushed a hotfix for the login timeout. Let's check the edge case before we deploy to production.";
+  const raw =
+    "⟦FYI | 参考までに | 2⟧、⟦login timeout | ログインのタイムアウト | 3⟧に対する⟦hotfix | 緊急修正 | 4⟧を⟦push | プッシュ | 2⟧しました。⟦production | 本番 | 2⟧に⟦deploy | デプロイ | 3⟧する前に、⟦edge case | 想定外のケース | 4⟧を⟦check | 確認 | 1⟧しましょう。";
+  it("renders each level from one answer, like the Mac", () => {
+    const graded = parseGraded(raw, ["hotfix"], source);
+    expect(phrasesOf(graded)).toHaveLength(8);
+    expect(render(graded, 0).text).toBe("参考までに、ログインのタイムアウトに対する緊急修正をプッシュしました。本番にデプロイする前に、想定外のケースを確認しましょう。");
+    const ten = render(graded, 10);
+    expect(ten.kept.map((k) => k.english)).toContain("hotfix");
+    const counts = ([10, 30, 50] as const).map((level) => render(graded, level).kept.length);
+    expect(counts).toEqual([...counts].sort((a, b) => a - b));
+    expect(counts[0]).toBeLessThan(counts[2]!);
+    expect(render(graded, 50).text).toContain("push しました");
+    expect(render(graded, 90).text.startsWith("FYI, I pushed a hotfix")).toBe(true);
+    expect(readingPoints(render(graded, 0), 0)).toBe(0);
+  });
+  it("splits long text into paragraph groups and joins them back", () => {
+    const paragraph = "word ".repeat(100);
+    const text = [paragraph, paragraph, paragraph].join("\n\n");
+    const parts = splitParts(text, 1200);
+    expect(parts).toHaveLength(2);
+    expect(parts.join("\n\n")).toBe(text);
+    const one = parseGraded("⟦word | 語 | 1⟧です", [], "word");
+    expect(japaneseOf(joinGraded([one, one], "word\n\nword"))).toBe("語です\n\n語です");
   });
 });
