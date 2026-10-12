@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Mastery, hasCardPair, masteryLabel, type WordEntry } from "../../core/models";
+import { matchesQuery } from "../../core/recall";
 import { canSpeak } from "../../core/speech";
 import { useActivity } from "../../stores/activity";
 import { useSpeech } from "../../stores/speech";
@@ -10,11 +11,14 @@ import { sortLabels, useBook, type Face, type Sort } from "./store";
 export function BookPage() {
   const words = useWords((state) => state.words);
   const loaded = useWords((state) => state.loaded);
+  const activityLoaded = useActivity((state) => state.events.length > 0);
   const { face, sort, order, setFace, setSort, refresh } = useBook();
+  const [query, setQuery] = useState("");
 
+  // 記録が届いてから並べ直す。おすすめ順はテストの記録を使うため
   useEffect(() => {
-    if (loaded) refresh(useWords.getState().words);
-  }, [loaded, refresh]);
+    if (loaded) refresh(useWords.getState().words, useActivity.getState().events);
+  }, [loaded, activityLoaded, refresh]);
 
   const listening = useSpeech((state) => state.listening);
   const speakingID = useSpeech((state) => state.speakingID);
@@ -26,8 +30,9 @@ export function BookPage() {
   const ordered = useMemo(() => {
     const byID = new Map(words.map((word) => [word.id, word]));
     const known = new Set(order);
-    return [...words.filter((word) => !known.has(word.id)), ...order.map((id) => byID.get(id)).filter((word): word is WordEntry => !!word)];
-  }, [words, order]);
+    const all = [...words.filter((word) => !known.has(word.id)), ...order.map((id) => byID.get(id)).filter((word): word is WordEntry => !!word)];
+    return all.filter((word) => matchesQuery(word, query));
+  }, [words, order, query]);
 
   return (
     <section className="page">
@@ -43,7 +48,7 @@ export function BookPage() {
               </button>
             ))}
           </div>
-          <select aria-label="Sort" value={sort} onChange={(event) => setSort(event.target.value as Sort, words)}>
+          <select aria-label="Sort" value={sort} onChange={(event) => setSort(event.target.value as Sort, words, useActivity.getState().events)}>
             {(Object.keys(sortLabels) as Sort[]).map((value) => (
               <option key={value} value={value}>
                 {sortLabels[value]}
@@ -52,7 +57,10 @@ export function BookPage() {
           </select>
         </div>
       </header>
-      {canSpeak() && words.length > 0 && (
+      {words.length > 0 && (
+        <input className="search" type="search" placeholder="Search your Book" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Search your Book" />
+      )}
+      {canSpeak() && ordered.length > 0 && (
         <div className="listen-bar">
           <button
             type="button"
@@ -66,6 +74,8 @@ export function BookPage() {
       )}
       {!loaded ? null : words.length === 0 ? (
         <p className="empty">Your Book is empty. Words you save on the Mac show up here.</p>
+      ) : ordered.length === 0 ? (
+        <p className="empty">No words match “{query}”.</p>
       ) : (
         <ul className="cards">
           {ordered.map((word) => (

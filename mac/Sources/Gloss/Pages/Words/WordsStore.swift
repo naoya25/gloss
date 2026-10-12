@@ -162,7 +162,7 @@ final class WordsStore {
     }
 
     private func refreshCardOrder() {
-        state.cardOrder = state.words.sorted(by: settings.state.wordSort).map(\.id)
+        state.cardOrder = state.words.sorted(by: settings.state.wordSort, events: activity.state.events).map(\.id)
     }
 
     // カードに使う短い英語・日本語と例文を、まだ無い単語の分だけ1つずつ作る。

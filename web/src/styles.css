@@ -207,3 +207,4 @@ button:disabled { opacity: 0.6; }
 .today-counts { margin: 24px 0 16px; font-size: 14px; color: var(--sub); }
 .today-counts b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .today-counts .sub { display: inline; }
+.search { width: 100%; min-height: 44px; margin: -4px 0 12px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 16px; }

@@ -526,3 +526,33 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     let known = (0..<200).map { _ in WordQuiz.pick(from: words, now: now).filter { $0.masteryLevel == .known }.count }.reduce(0, +)
     #expect(known > 0 && known < 1_000)
 }
+
+@Test func recommendedSortPutsLikelyForgottenWordsFirst() {
+    let now = Date(timeIntervalSince1970: 1_791_800_000)
+    func card(_ term: String, _ mastery: Mastery, daysAgo: Double) -> WordEntry {
+        var word = WordEntry(term: term, note: "", context: "")
+        word.mastery = mastery
+        word.lastReviewed = now.addingTimeInterval(-daysAgo * 86_400)
+        return word
+    }
+    let fresh = card("fresh", .notYet, daysAgo: 0)
+    let stale = card("stale", .notYet, daysAgo: 3)
+    let known = card("known", .known, daysAgo: 3)
+    var proven = card("proven", .unsure, daysAgo: 3)
+    proven.lastReviewed = now.addingTimeInterval(-3 * 86_400)
+    let test = ActivityEvent(kind: .wordQuiz, title: "Word Test", answers: [
+        WordAnswer(wordID: proven.id, prompt: "", answer: "", verdict: .known),
+    ], date: now.addingTimeInterval(-3 * 86_400))
+    #expect([fresh, known, proven, stale].sorted(by: .recommended, events: [test], now: now).map(\.term) == ["stale", "proven", "known", "fresh"])
+    #expect(Recall.streaks([test]) == [proven.id: 1])
+}
+
+@Test func bookSearchMatchesEnglishJapaneseAndNotes() {
+    var word = WordEntry(term: "Rule of Thumb", note: "大まかな目安", context: "")
+    word.japanese = "経験則"
+    #expect(word.matches("rule of"))
+    #expect(word.matches("経験"))
+    #expect(word.matches("目安"))
+    #expect(word.matches("  "))
+    #expect(!word.matches("deploy"))
+}

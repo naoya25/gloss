@@ -6,7 +6,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var jaiUserID: String = ""
     public var target: TranslationTarget = .auto
     public var cardFace: CardFace = .english
-    public var wordSort: WordSort = .stale
+    public var wordSort: WordSort = .recommended
     public var syncURL: String = ""
 
     public init() {}

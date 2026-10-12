@@ -6,6 +6,8 @@ import { lessonBrief } from "./lessonBrief";
 import { choiceOptions, isExactAnswer, nextMastery, pickQuestions, questionWeight } from "./quiz";
 import { bookSize, lastDays, quizTotals, streak } from "./report";
 import { pickVoice } from "./speech";
+import { matchesQuery, recallStreaks } from "./recall";
+import { sortWords } from "../pages/book/store";
 import { activityRow, didPushWords, mergeActivity, mergeWords, wordRows } from "./sync";
 
 const word = (patch: Partial<WordEntry> = {}): WordEntry => ({
@@ -193,5 +195,27 @@ describe("growth", () => {
   });
   it("averages the last five writing scores", () => {
     expect(movingAverage([40, 60, 80, 100, 20, 100])).toEqual([40, 50, 60, 70, 60, 72]);
+  });
+});
+
+describe("recommended order and search", () => {
+  it("puts likely forgotten words first, using test streaks", () => {
+    const now = Date.UTC(2026, 9, 12);
+    const ago = (days: number) => new Date(now - days * 86_400_000).toISOString();
+    const fresh = word({ term: "fresh", mastery: Mastery.NotYet, lastReviewed: ago(0) });
+    const stale = word({ term: "stale", mastery: Mastery.NotYet, lastReviewed: ago(3) });
+    const known = word({ term: "known", mastery: Mastery.Known, lastReviewed: ago(3) });
+    const proven = word({ term: "proven", mastery: Mastery.Unsure, lastReviewed: ago(3) });
+    const test: ActivityEvent = { id: "t", date: ago(3), kind: "wordQuiz", title: "Word Test", answers: [{ wordID: proven.id, prompt: "", answer: "", verdict: Mastery.Known }] };
+    const order = sortWords([fresh, known, proven, stale], "recommended", [test], now);
+    expect(order).toEqual([stale.id, proven.id, known.id, fresh.id]);
+    expect(recallStreaks([test]).get(proven.id)).toBe(1);
+  });
+  it("searches English, Japanese and notes ignoring case and width", () => {
+    const entry = word({ term: "Rule of Thumb", english: "rule of thumb", japanese: "経験則", note: "大まかな目安" });
+    expect(matchesQuery(entry, "RULE OF")).toBe(true);
+    expect(matchesQuery(entry, "ｒｕｌｅ")).toBe(true);
+    expect(matchesQuery(entry, "目安")).toBe(true);
+    expect(matchesQuery(entry, "deploy")).toBe(false);
   });
 });
