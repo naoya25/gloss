@@ -199,20 +199,32 @@ final class TranslateStore {
                     messages = [ChatMessage(.system, Prompts.translation(target: target, hasImage: image != nil)), userMessage]
                 }
                 guard !Task.isCancelled else { return }
-                for try await chunk in client.stream(messages) {
-                    // キャンセル前に届いていた分が、次の翻訳の表示を上書きしないようにする
-                    guard !Task.isCancelled else { return }
-                    raw += chunk
-                    if mixes {
-                        let graded = GradedTranslation.parse(raw, knownTerms: known, source: typed)
-                        state.graded = graded
-                        state.translation = graded.japanese
-                    } else if image == nil {
-                        state.translation = raw
-                    } else {
-                        let output = Prompts.splitImageOutput(raw)
-                        if fillsSourceFromImage { state.sourceText = output.transcript }
-                        state.translation = output.translation
+                if mixes {
+                    // 長い英文は段落のまとまりごとに順に訳し、訳せた分から画面に出す
+                    var done: [GradedTranslation] = []
+                    for part in GradedTranslation.parts(of: typed) {
+                        var partRaw = ""
+                        for try await piece in client.stream([messages[0], ChatMessage(.user, part)]) {
+                            guard !Task.isCancelled else { return }
+                            partRaw += piece
+                            let graded = GradedTranslation.joined(done + [GradedTranslation.parse(partRaw, knownTerms: known, source: part)], source: typed)
+                            state.graded = graded
+                            state.translation = graded.japanese
+                        }
+                        done.append(GradedTranslation.parse(partRaw, knownTerms: known, source: part))
+                    }
+                } else {
+                    for try await chunk in client.stream(messages) {
+                        // キャンセル前に届いていた分が、次の翻訳の表示を上書きしないようにする
+                        guard !Task.isCancelled else { return }
+                        raw += chunk
+                        if image == nil {
+                            state.translation = raw
+                        } else {
+                            let output = Prompts.splitImageOutput(raw)
+                            if fillsSourceFromImage { state.sourceText = output.transcript }
+                            state.translation = output.translation
+                        }
                     }
                 }
                 // キャンセルされたストリームは throw せずにループを抜けるので、ここで止める

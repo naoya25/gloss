@@ -50,7 +50,7 @@ public struct GradedTranslation: Equatable, Sendable {
             let english = parts.first ?? ""
             let japanese = parts.count > 1 ? parts[1] : english
             let isLearned = known.contains(english.lowercased())
-            if english.isEmpty || !MixedTranslation.contains(english, in: source) {
+            if english.isEmpty || !Self.appears(english, in: source) {
                 segments.append(.plain(japanese))
             } else {
                 let difficulty = isLearned ? 0 : (parts.count > 2 ? Int(parts[2].prefix { $0.isNumber }) ?? 3 : 3)
@@ -60,6 +60,46 @@ public struct GradedTranslation: Equatable, Sendable {
         }
         if !rest.isEmpty { segments.append(.plain(String(rest))) }
         return GradedTranslation(segments: segments, source: source)
+    }
+
+    // 長い英文は、空行で区切った段落を limit 文字ほどずつにまとめて、別々に訳してもらう。
+    // 一度に長い文を頼むと、AI が語句の印を付け忘れて、英語に戻せる語句がほとんど無くなるため
+    public static func parts(of source: String, limit: Int = 1_200) -> [String] {
+        let paragraphs = source.components(separatedBy: "\n\n").filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        var parts: [String] = []
+        var current = ""
+        for paragraph in paragraphs {
+            if !current.isEmpty, current.count + paragraph.count > limit {
+                parts.append(current)
+                current = ""
+            }
+            current += current.isEmpty ? paragraph : "\n\n" + paragraph
+        }
+        if !current.isEmpty { parts.append(current) }
+        return parts.isEmpty ? [source] : parts
+    }
+
+    // 分けて訳したものを、空行でつないで1つに戻す
+    public static func joined(_ parts: [GradedTranslation], source: String) -> GradedTranslation {
+        var segments: [Segment] = []
+        for part in parts {
+            if !segments.isEmpty { segments.append(.plain("\n\n")) }
+            segments += part.segments
+        }
+        return GradedTranslation(segments: segments, source: source)
+    }
+
+    // 動詞は原形で書かせるので、英文の中では活用した形(pushed, migrating)で出てくることがある。その形も探す
+    static func appears(_ english: String, in source: String) -> Bool {
+        if MixedTranslation.contains(english, in: source) { return true }
+        var words = english.split(separator: " ").map(String.init)
+        guard let first = words.first else { return false }
+        let stem = first.hasSuffix("e") ? String(first.dropLast()) : first
+        for form in [first + "s", first + "es", first + "d", first + "ed", stem + "ing", first + first.suffix(1) + "ed", first + first.suffix(1) + "ing"] {
+            words[0] = form
+            if MixedTranslation.contains(words.joined(separator: " "), in: source) { return true }
+        }
+        return false
     }
 
     public var phrases: [GlossedPhrase] {
@@ -87,23 +127,22 @@ public struct GradedTranslation: Equatable, Sendable {
         }
     }
 
-    // ✓ の語は必ず英語にし、残りはやさしい語句から順に英語に戻して、英語の割合が目標に届いたら止める
+    // ✓ の語は必ず英語にし、残りはやさしい語句から順に、英語に戻せる語句(の文字数)の target% まで英語に戻す。
+    // 訳全体の文字数を目標にすると、コードや表・製品名の多い文書では語句を全部戻しても届かず、段階どうしが同じになるため
     private func japaneseBased(target: Int) -> MixedTranslation {
-        let order = phrases.indices.sorted { phrases[$0].difficulty < phrases[$1].difficulty }
+        let size = phrases.map { $0.english.filter { !$0.isWhitespace }.count }
+        let goal = Double(size.reduce(0, +)) * Double(target) / 100
         var keep = Set(phrases.indices.filter { phrases[$0].isLearned })
-        var result = mixed(keeping: keep)
-        for index in order where !keep.contains(index) {
-            guard result.englishRate < target else { break }
-            keep.insert(index)
-            let next = mixed(keeping: keep)
+        var kept = Double(keep.map { size[$0] }.reduce(0, +))
+        for index in phrases.indices.sorted(by: { phrases[$0].difficulty < phrases[$1].difficulty }) where !keep.contains(index) {
+            guard kept < goal else { break }
             // 足すと目標から遠ざかるほど長い語句は、飛ばして次の短い語句を試す
-            if next.englishRate > target, next.englishRate - target > target - result.englishRate {
-                keep.remove(index)
-                continue
-            }
-            result = next
+            let next = kept + Double(size[index])
+            if next - goal > goal - kept { continue }
+            keep.insert(index)
+            kept = next
         }
-        return result
+        return mixed(keeping: keep)
     }
 
     private func mixed(keeping keep: Set<Int>) -> MixedTranslation {

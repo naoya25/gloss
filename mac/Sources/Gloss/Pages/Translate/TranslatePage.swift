@@ -310,7 +310,7 @@ private struct ReadChoiceRow: View {
                         .fixedSize()
                         .help("How much of the translation to leave in English (⌘1–⌘5)")
                         if state.level != .japanese {
-                            KeptSummary(mixed: mixed)
+                            KeptSummary(mixed: mixed, phraseCount: graded.phrases.count, level: state.level)
                         }
                     }
                     Spacer()
@@ -345,13 +345,20 @@ private struct ReadChoiceRow: View {
     }
 }
 
-// 点の内訳。覚えた語は1語ごと、ほかは英語の割合 10% ごと
+// 段階の % は「英語に戻せる語句のうち何割を英語にするか」。コードや表の多い文書では、訳全体の英語の割合はそれより低くなるので、両方を出す
 private struct KeptSummary: View {
     let mixed: MixedTranslation
+    let phraseCount: Int
+    let level: EnglishLevel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("\(mixed.englishRate)% in English · +\(Points.perTriedTerm) pt per 10%")
+            if level == .ninety {
+                Text("The original English, with Japanese for the hardest phrases · \(mixed.englishRate)% of the text in English")
+            } else {
+                Text("\(Set(mixed.kept.map { $0.english.lowercased() }).count) of \(phraseCount) phrases in English · \(mixed.englishRate)% of the text")
+            }
+            Text("+\(Points.perTriedTerm) pt per 10% of the text in English")
             if !mixed.learnedTerms.isEmpty {
                 Text("Learned (+\(Points.perKeptTerm) pt each): \(mixed.learnedTerms.joined(separator: ", "))")
             }

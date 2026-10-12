@@ -571,3 +571,20 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     #expect(ninety.text.hasPrefix("FYI, I pushed a hotfix"))
     #expect(ninety.englishRate >= 70)
 }
+
+@Test func longTextIsTranslatedInParagraphGroups() {
+    let paragraph = String(repeating: "word ", count: 100)
+    let source = [paragraph, paragraph, paragraph].joined(separator: "\n\n")
+    let parts = GradedTranslation.parts(of: source, limit: 1_200)
+    #expect(parts.count == 2)
+    #expect(parts.joined(separator: "\n\n") == source)
+    let a = GradedTranslation.parse("⟦word | 語 | 1⟧です", knownTerms: [], source: "word")
+    let joined = GradedTranslation.joined([a, a], source: "word\n\nword")
+    #expect(joined.japanese == "語です\n\n語です")
+}
+
+@Test func gradedPhrasesMatchInflectedVerbsInTheSource() {
+    let graded = GradedTranslation.parse("⟦push | プッシュ | 2⟧しました。⟦migrate | 移行 | 3⟧する予定", knownTerms: [], source: "I pushed it. We are migrating.")
+    #expect(graded.phrases.map(\.english) == ["push", "migrate"])
+    #expect(graded.rendered(.fifty).text.contains("push しました"))
+}

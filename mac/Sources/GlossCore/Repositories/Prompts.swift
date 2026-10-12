@@ -103,11 +103,14 @@ public enum Prompts {
     public static func gradedTranslation(known: [String]) -> String {
         """
         あなたはプロの翻訳者です。入力の英文を、要約・省略せずに自然な日本語へ全文翻訳してください。出力は訳文のみとし、前置きや説明を含めないでください。
-        ただし、英文の中の意味のある語句(名詞句・動詞句・形容詞・副詞・慣用表現。1〜4語程度)は、訳文の中で全部次の形で書いてください。
+        ただし、英文の中の意味のある語句(名詞句・動詞句・形容詞・副詞・慣用表現。1〜4語程度)は、訳文の中で全部次の形で書いてください。英文の単語の7割以上が、この形のどれかに入るようにしてください。
         \(MixedTranslation.open)<英文での表記> | <その部分の日本語訳> | <難しさ>\(MixedTranslation.close)
         - 難しさは、日本人のソフトウェアエンジニアにとっての難しさを 1〜5 の整数で書いてください。1: 中学で習う語(meeting, check)、3: 仕事でよく見る語(deploy, deadline)、5: 難しい語や慣用表現(rule of thumb, mitigate)
         - 学習者はこの形の部分を英語のまま読むことがあります。英語のまま差し込んでも日本語の文として自然になるよう、前後の助詞や語順を整えてください(例: 「\(MixedTranslation.open)hotfix | 緊急修正 | 3\(MixedTranslation.close)を出しました」)
-        - 動詞・形容詞の語句は「〜する」「〜な」を付けるなどして、日本語の文の中で使える形にしてください
+        - 動詞は原形(push, migrate)で書き、日本語訳は語幹だけ(プッシュ、移行)にして、「する」「しました」「している」などの活用は形の外に書いてください(例: 「\(MixedTranslation.open)push | プッシュ | 2\(MixedTranslation.close)しました」「\(MixedTranslation.open)migrate | 移行 | 3\(MixedTranslation.close)する予定です」)
+        - 形容詞も同じく、「な」「に」は形の外に書いてください(例: 「\(MixedTranslation.open)stable | 安定 | 2\(MixedTranslation.close)な」)
+        - 形の中の日本語と同じ言葉を、形の外で繰り返さないでください(誤: 「主な\(MixedTranslation.open)main goal | 主な目標 | 2\(MixedTranslation.close)」)
+        - FYI・ASAP などの略語や挨拶も語句として囲んでください
         - 冠詞・前置詞・代名詞・be 動詞だけの部分は囲まず、普通に訳してください。製品名・人名・コード・URL は原文のままにし、囲まないでください
         - 入力の英文に無い内容を訳文に足さないでください
         入力が Markdown 記法を含む場合は記法を保ってください。
