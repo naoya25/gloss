@@ -1,100 +1,290 @@
-import { useEffect, useState } from "react";
-import { activityLabel } from "../../core/models";
+import { useEffect, useState, type ReactNode } from "react";
+import { cumulative, dailyCounts, countOn, englishRates, firstCorrect, movingAverage, newlyCorrect, writingScores } from "../../core/growth";
 import { lessonBrief } from "../../core/lessonBrief";
-import { averageScore, bookSize, countKind, dailyCounts, eventsOn, lastDays, pointsOf, quizTotals, streak, totalPoints, englishRate } from "../../core/report";
-import { reportImage, reportMarkdown, type ReportSummary } from "../../core/reportCard";
+import { countKind, englishRate, eventsOn, lastDays, totalPoints, streak } from "../../core/report";
+import { reportImage, reportMarkdown, type ShareSummary } from "../../core/reportCard";
 import { useActivity } from "../../stores/activity";
 import { useWords } from "../../stores/words";
 
-type Tab = "today" | "progress";
+type Range = 14 | 30 | 90;
+const RANGES: [Range, string][] = [
+  [14, "2W"],
+  [30, "1M"],
+  [90, "3M"],
+];
 
+const md = (day: Date) => `${day.getMonth() + 1}/${day.getDate()}`;
+
+// 進んでいる実感が続けるいちばんの燃料なので、やった量より先に、できるようになったことを大きく出す
 export function ReportPage() {
-  const [tab, setTab] = useState<Tab>("today");
+  const events = useActivity((state) => state.events);
+  const words = useWords((state) => state.words);
+  const [range, setRange] = useState<Range>(14);
+  const now = new Date();
+  const today = eventsOn(events, now);
+  const days = streak(events);
+  const said = firstCorrect(events, false);
+  const seen = firstCorrect(events, true);
+  const saidToday = newlyCorrect(said, now);
+  const seenOnly = [...seen.keys()].filter((id) => !said.has(id)).length;
+  const reads = today.filter((event) => event.kind === "glossRead");
+  const english = reads.reduce((sum, event) => sum + (event.score ?? 0), 0);
+  const translated = reads.reduce((sum, event) => sum + (event.total ?? 0), 0);
+  const rate = englishRate(today);
+  const rangeDays = lastDays(range, now);
+  const scores = writingScores(events, rangeDays[0]!);
+  const byID = new Map(words.map((word) => [word.id, word]));
+
   return (
-    <section className="page">
+    <section className="page report">
       <header className="page-head">
-        <h1>Report</h1>
-        <div className="segmented" role="group" aria-label="View">
-          {(["today", "progress"] as Tab[]).map((value) => (
-            <button key={value} type="button" aria-pressed={tab === value} onClick={() => setTab(value)}>
-              {value === "today" ? "Today" : "Progress"}
+        <h1>{now.toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" })}</h1>
+        {days > 0 && <span className="streak">🔥 {days}-day streak</span>}
+      </header>
+
+      <div className="hero">
+        <div className="hero-card">
+          <span className="label">Read in English</span>
+          <strong>{rate === null ? "–" : <>{rate}<small>%</small></>}</strong>
+          {rate === null ? (
+            <span className="sub">Translate on the Mac and choose “Read It As Is” to start.</span>
+          ) : (
+            <>
+              <span className="sub">How much of today's translations stayed in English · {reads.length} texts</span>
+              <div className="mixbar" aria-hidden="true">
+                <span style={{ width: `${Math.max(2, (english * 100) / translated)}%` }} />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="hero-card">
+          <span className="label">Words you can say</span>
+          <strong>{said.size}</strong>
+          <span className="sub">
+            <b>{saidToday.length ? `+${saidToday.length} today` : "None new today"}</b> · answered yourself in tests
+          </span>
+          <span className="sub">Another {seenOnly} recognized in 4-Choice</span>
+        </div>
+      </div>
+
+      <div className="section-head">
+        <h2>Progress</h2>
+        <div className="segmented" role="group" aria-label="Range">
+          {RANGES.map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)}>
+              {label}
             </button>
           ))}
         </div>
-      </header>
-      {tab === "today" ? <Today /> : <Progress />}
+      </div>
+      <Card title="Read in English" claim="How much of each translation stayed in English. The higher, the less you need translation.">
+        <LineChart days={rangeDays} series={[{ name: "English", values: englishRates(events, rangeDays), className: "en" }]} unit="%" min={10} />
+      </Card>
+      <Card title="Words you can say" claim="Words you got right in a test for the first time, added up.">
+        <div className="legend">
+          <span><i className="en" />Said yourself</span>
+          <span><i className="seen" />4-Choice</span>
+        </div>
+        <LineChart
+          days={rangeDays}
+          series={[
+            { name: "Said", values: cumulative(said, rangeDays), className: "en" },
+            { name: "4-Choice", values: cumulative(seen, rangeDays), className: "seen" },
+          ]}
+          unit=""
+          min={10}
+        />
+      </Card>
+      <Card title="Writing Test" claim="Each score, and the average of the last 5. (Writing Test is on the Mac.)">
+        {scores.length ? <WritingChart scores={scores} /> : <p className="empty">No Writing Tests in this range.</p>}
+      </Card>
+      <Card title="Study days" claim="The days you studied, and how much. Darker means more.">
+        <StudyCalendar counts={dailyCounts(events)} today={now} />
+      </Card>
+
+      <h2>Words you said today</h2>
+      <p className="sub">Words you got right for the first time in a Word or Meaning Test.</p>
+      {saidToday.length ? (
+        <ul className="said">
+          {saidToday.map((id) => {
+            const word = byID.get(id);
+            return word ? (
+              <li key={id}>
+                <b>{word.english ?? word.term}</b>
+                <span className="sub">{word.japanese}</span>
+              </li>
+            ) : null;
+          })}
+        </ul>
+      ) : (
+        <p className="empty">Take a Word or Meaning Test, and the words you get right show up here.</p>
+      )}
+
+      <p className="today-counts">
+        Today: translated <b>{countKind(today, "translated")}</b> · flipped <b>{countKind(today, "cardFlipped")}</b> · saved{" "}
+        <b>{countKind(today, "wordSaved")}</b> · points <b>{totalPoints(today)}</b> <span className="sub">({totalPoints(events)} in total)</span>
+      </p>
+
+      <ShareReport summary={{ day: now, streak: days, allEvents: events, words }} hasToday={today.length > 0} />
+      <CopyLesson />
     </section>
   );
 }
 
-function Today() {
-  const events = useActivity((state) => state.events);
-  const words = useWords((state) => state.words);
-  const today = eventsOn(events, new Date());
-  const quiz = quizTotals(today);
-  const writing = averageScore(today, "writing");
-  const reading = averageScore(today, "reading");
-  const days = streak(events);
-  const english = englishRate(today);
-  const tiles: [string, string, string?][] = [
-    ["Points", `${totalPoints(today)} pt`, `${totalPoints(events)} in total`],
-    ["English in Translations", english === null ? "–" : `${english}%`],
-    ["Translations", `${countKind(today, "translated")}`],
-    ["Words Saved", `${countKind(today, "wordSaved")}`, `${words.length} in your Book`],
-    ["Cards Flipped", `${countKind(today, "cardFlipped")}`],
-    ["Word Tests", quiz.total ? `${Math.round((quiz.correct * 100) / quiz.total)}%` : "–", quiz.total ? `${quiz.correct} / ${quiz.total}` : undefined],
-    ["Writing", writing === null ? "–" : `${writing} pts`],
-    ["Reading", reading === null ? "–" : `${reading} pts`],
-  ];
+function Card({ title, claim, children }: { title: string; claim: string; children: ReactNode }) {
+  return (
+    <figure className="chart">
+      <figcaption>
+        {title}
+        <span className="sub">{claim}</span>
+      </figcaption>
+      {children}
+    </figure>
+  );
+}
+
+interface Series {
+  name: string;
+  values: (number | null)[];
+  className: string;
+}
+
+// グラフのライブラリは使わず、座標を計算して SVG で描く。押した日の値を上に出す
+function LineChart({ days, series, unit, min }: { days: Date[]; series: Series[]; unit: string; min: number }) {
+  const [picked, setPicked] = useState<number | null>(null);
+  const width = 320;
+  const height = 130;
+  const pad = { l: 28, r: 8, t: 10, b: 18 };
+  const all = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
+  if (!all.length) return <p className="empty">Nothing in this range yet.</p>;
+  const max = Math.max(min, Math.ceil(Math.max(...all) / 5) * 5);
+  const x = (i: number) => pad.l + (i * (width - pad.l - pad.r)) / Math.max(1, days.length - 1);
+  const y = (v: number) => height - pad.b - (v / max) * (height - pad.t - pad.b);
+  const step = Math.ceil(days.length / 5);
   return (
     <>
-      <div className="today-head">
-        <span className="date">{new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" })}</span>
-        {days > 0 && <span className="streak">🔥 {days}-day streak</span>}
-      </div>
-      <div className="tiles">
-        {tiles.map(([label, value, caption]) => (
-          <div key={label} className="tile">
-            <span className="label">{label}</span>
-            <strong>{value}</strong>
-            <span className="sub">{caption ?? " "}</span>
+      <p className="chart-tip">
+        {picked === null
+          ? "Tap the chart to see a day"
+          : `${md(days[picked]!)} · ${series.map((s) => `${s.name} ${s.values[picked] === null ? "–" : Math.round(s.values[picked]!) + unit}`).join(" · ")}`}
+      </p>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={series.map((s) => s.name).join(", ")}>
+        {[0, max / 2, max].map((g) => (
+          <g key={g}>
+            <line className="grid" x1={pad.l} x2={width - pad.r} y1={y(g)} y2={y(g)} />
+            <text x={pad.l - 4} y={y(g) + 3} textAnchor="end">
+              {Math.round(g)}
+              {unit}
+            </text>
+          </g>
+        ))}
+        {series.map((s) => {
+          const points = s.values.flatMap((v, i) => (v === null ? [] : [`${x(i)},${y(v)}`]));
+          return (
+            <g key={s.name} className={s.className}>
+              <polyline className="line" fill="none" points={points.join(" ")} />
+              {s.values.map((v, i) => (v === null ? null : <circle key={i} cx={x(i)} cy={y(v)} r={i === picked ? 4.5 : 2.5} />))}
+            </g>
+          );
+        })}
+        {picked !== null && <line className="rule" x1={x(picked)} x2={x(picked)} y1={pad.t} y2={height - pad.b} />}
+        {days.map((day, i) => (
+          <g key={i}>
+            {(days.length - 1 - i) % step === 0 && (
+              <text x={x(i)} y={height - 4} textAnchor="middle">
+                {md(day)}
+              </text>
+            )}
+            <rect
+              x={x(i) - (width - pad.l - pad.r) / days.length / 2}
+              y={pad.t}
+              width={(width - pad.l - pad.r) / days.length}
+              height={height - pad.t - pad.b}
+              fill="transparent"
+              onClick={() => setPicked(i)}
+              onMouseEnter={() => setPicked(i)}
+            />
+          </g>
+        ))}
+      </svg>
+    </>
+  );
+}
+
+// 点は1回ずつの点数、線は直近5回の平均。1回の上下より、線の向きを見る
+function WritingChart({ scores }: { scores: number[] }) {
+  const width = 320;
+  const height = 130;
+  const pad = { l: 28, r: 8, t: 10, b: 18 };
+  const average = movingAverage(scores);
+  const x = (i: number) => pad.l + (i * (width - pad.l - pad.r)) / Math.max(1, scores.length - 1);
+  const y = (v: number) => height - pad.b - (v / 100) * (height - pad.t - pad.b);
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Writing Test scores: ${scores.join(", ")}`}>
+      {[0, 50, 100].map((g) => (
+        <g key={g}>
+          <line className="grid" x1={pad.l} x2={width - pad.r} y1={y(g)} y2={y(g)} />
+          <text x={pad.l - 4} y={y(g) + 3} textAnchor="end">
+            {g}
+          </text>
+        </g>
+      ))}
+      {scores.map((score, i) => (
+        <circle key={i} className="dot" cx={x(i)} cy={y(score)} r={3}>
+          <title>{`Test ${i + 1}: ${score} pts`}</title>
+        </circle>
+      ))}
+      <polyline className="line en-stroke" fill="none" points={average.map((v, i) => `${x(i)},${y(v)}`).join(" ")} />
+    </svg>
+  );
+}
+
+// やった日のカレンダー。列が週、行が曜日。濃さは記録の数を5段にしたもの
+function StudyCalendar({ counts, today }: { counts: Map<string, number>; today: Date }) {
+  const weeks = 15;
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const start = new Date(end);
+  start.setDate(end.getDate() - end.getDay() - 7 * (weeks - 1));
+  const level = (n: number) => (n === 0 ? 0 : n < 30 ? 1 : n < 60 ? 2 : n < 100 ? 3 : 4);
+  return (
+    <>
+      <div className="calendar">
+        {Array.from({ length: weeks }, (_, week) => (
+          <div key={week}>
+            {Array.from({ length: 7 }, (_, weekday) => {
+              const day = new Date(start);
+              day.setDate(start.getDate() + week * 7 + weekday);
+              if (day > end) return <i key={weekday} className="future" />;
+              const n = countOn(counts, day);
+              return <i key={weekday} className={`level-${level(n)}`} title={`${md(day)}: ${n ? `${n} records` : "no study"}`} />;
+            })}
           </div>
         ))}
       </div>
-      {today.length > 0 && <ShareReport summary={{ day: new Date(), streak: days, events: today }} />}
-      <CopyLesson />
-      {today.length === 0 ? (
-        <p className="empty">Nothing yet today. Flip some cards or take a test.</p>
-      ) : (
-        <ul className="log">
-          {today.map((event) => (
-            <li key={event.id}>
-              <time>{new Date(event.date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}</time>
-              <span className="kind">{activityLabel[event.kind]}</span>
-              <span className="title">{event.title}</span>
-              {event.kind === "glossRead" ? <b>+{pointsOf(event)} pt</b> : event.total ? <b>{event.score}/{event.total}</b> : event.score !== undefined ? <b>{event.score} pts</b> : null}
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="calendar-legend">
+        Less <i className="level-0" /><i className="level-1" /><i className="level-2" /><i className="level-3" /><i className="level-4" /> More
+      </div>
     </>
   );
 }
 
 // 画像は開いたときに作っておく。押してから作ると、iPhone の Safari が共有を「操作の直後ではない」として断るため
-function ShareReport({ summary }: { summary: ReportSummary }) {
+function ShareReport({ summary, hasToday }: { summary: ShareSummary; hasToday: boolean }) {
   const [image, setImage] = useState<Blob | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const key = summary.events.map((event) => event.id).join(",");
+  const key = `${summary.allEvents.length}-${summary.words.length}`;
 
   useEffect(() => {
+    if (!hasToday) return;
     let alive = true;
     void reportImage(summary).then((blob) => alive && setImage(blob));
     return () => {
       alive = false;
     };
-    // 記録が増えたときだけ描き直す
-  }, [key, summary.streak]);
+    // 記録か単語が増えたときだけ描き直す
+  }, [key, summary.streak, hasToday]);
+
+  if (!hasToday) return null;
 
   function flash(text: string) {
     setStatus(text);
@@ -167,47 +357,5 @@ function CopyLesson() {
       </button>
       {status && <span className="sub">{status}</span>}
     </div>
-  );
-}
-
-// 直近2週間を棒と線で見せる。グラフのライブラリは使わず、座標を計算して SVG で描く
-function Progress() {
-  const events = useActivity((state) => state.events);
-  const words = useWords((state) => state.words);
-  const days = lastDays(14);
-  const counts = dailyCounts(events, days);
-  const sizes = bookSize(words, days);
-  return (
-    <>
-      <Chart title="Daily Activity" values={counts} kind="bar" days={days} />
-      <Chart title="Book Size" values={sizes} kind="line" days={days} />
-    </>
-  );
-}
-
-function Chart({ title, values, kind, days }: { title: string; values: number[]; kind: "bar" | "line"; days: Date[] }) {
-  const width = 320;
-  const height = 120;
-  const max = Math.max(1, ...values);
-  const step = width / values.length;
-  const y = (value: number) => height - (value / max) * (height - 12);
-  return (
-    <figure className="chart">
-      <figcaption>
-        {title} <span className="sub">max {max}</span>
-      </figcaption>
-      <svg viewBox={`0 0 ${width} ${height + 18}`} role="img" aria-label={`${title}: ${values.join(", ")}`}>
-        {kind === "bar"
-          ? values.map((value, i) => (
-              <rect key={i} className={value ? "bar" : "bar empty"} x={i * step + 3} y={y(value)} width={step - 6} height={Math.max(2, height - y(value))} rx="3" />
-            ))
-          : (
-              <polyline className="line" fill="none" points={values.map((value, i) => `${i * step + step / 2},${y(value)}`).join(" ")} />
-            )}
-        {days.map((day, i) => (i % 2 === values.length % 2 ? null : (
-          <text key={i} x={i * step + step / 2} y={height + 14} textAnchor="middle">{day.getDate()}</text>
-        )))}
-      </svg>
-    </figure>
   );
 }

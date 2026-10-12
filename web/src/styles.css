@@ -9,6 +9,8 @@
   --known: #1a7f37;
   --unsure: #bf8700;
   --not-yet: #cf222e;
+  --en: #2f6bff;
+  --seen: #b5651d;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -23,6 +25,8 @@
     --known: #3fb950;
     --unsure: #d29922;
     --not-yet: #f85149;
+    --en: #4c8dff;
+    --seen: #c27a2c;
   }
 }
 * { box-sizing: border-box; }
@@ -158,3 +162,48 @@ button:disabled { opacity: 0.6; }
 .choice-options-review li.right { border-left-color: var(--known); }
 .choice-options-review li.wrong { border-left-color: var(--not-yet); }
 .choice-review s { color: var(--sub); }
+
+/* Report: できるようになったことを大きく、やった量は小さく */
+.report h2 { font-size: 19px; margin: 24px 0 2px; }
+.report .streak { font-size: 15px; color: var(--ink); }
+.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.hero-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 4px; align-content: start; }
+.hero-card strong { font-size: 44px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.hero-card strong small { font-size: 20px; color: var(--sub); margin-left: 2px; }
+.hero-card .sub b { color: var(--ink); }
+.mixbar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; margin-top: 6px; }
+.mixbar span { display: block; height: 100%; background: var(--en); }
+.section-head { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 10px; }
+.section-head h2 { margin: 0; }
+.chart figcaption { display: grid; gap: 2px; font-weight: 600; margin-bottom: 6px; }
+.chart figcaption .sub { font-weight: 400; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .line { stroke-width: 2; stroke-linejoin: round; fill: none; }
+.chart .en .line, .chart .en-stroke { stroke: var(--en); }
+.chart .en circle { fill: var(--en); }
+.chart .seen .line { stroke: var(--seen); }
+.chart .seen circle { fill: var(--seen); }
+.chart .dot { fill: var(--sub); opacity: 0.7; }
+.chart .rule { stroke: var(--sub); stroke-width: 1; opacity: 0.5; }
+.chart-tip { margin: 0 0 4px; font-size: 12px; color: var(--sub); min-height: 18px; }
+.chart .empty { padding: 24px 8px; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--sub); margin-bottom: 4px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.legend i.en { background: var(--en); }
+.legend i.seen { background: var(--seen); }
+.calendar { display: grid; grid-template-columns: repeat(15, 1fr); gap: 3px; }
+.calendar div { display: grid; gap: 3px; }
+.calendar i, .calendar-legend i { display: block; aspect-ratio: 1; border-radius: 3px; }
+.calendar i.future { visibility: hidden; }
+.level-0 { background: var(--line); }
+.level-1 { background: color-mix(in srgb, var(--en) 30%, var(--surface)); }
+.level-2 { background: color-mix(in srgb, var(--en) 50%, var(--surface)); }
+.level-3 { background: color-mix(in srgb, var(--en) 75%, var(--surface)); }
+.level-4 { background: var(--en); }
+.calendar-legend { display: flex; align-items: center; justify-content: flex-end; gap: 3px; font-size: 11px; color: var(--sub); margin-top: 8px; }
+.calendar-legend i { width: 10px; }
+.said { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.said li { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--en); border-radius: 10px; padding: 8px 12px; }
+.today-counts { margin: 24px 0 16px; font-size: 14px; color: var(--sub); }
+.today-counts b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.today-counts .sub { display: inline; }

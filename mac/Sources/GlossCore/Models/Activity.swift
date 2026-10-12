@@ -113,31 +113,6 @@ public struct DayReport: Equatable, Sendable {
     }
 
     public var isEmpty: Bool { events.isEmpty }
-
-    public func markdown(calendar: Calendar = .current) -> String {
-        var lines = ["# Study Report: \(day.formatted(.dateTime.year().month().day().weekday()))", ""]
-        lines.append("- Points: \(points)")
-        lines.append("- Translations: \(count(.translated))")
-        if let englishRate { lines.append("- English in translations: \(englishRate)% (\(count(.glossRead)) texts)") }
-        lines.append("- Words saved: \(count(.wordSaved))")
-        lines.append("- Cards flipped: \(count(.cardFlipped))")
-        if quizTotal > 0 { lines.append("- Word Test: \(quizCorrect) / \(quizTotal) correct") }
-        if let average = writingAverage { lines.append("- Writing Test: \(count(.writing)) tasks, average \(average) pts") }
-        if let average = readingAverage { lines.append("- Reading Test: \(count(.reading)) tasks, average \(average) pts") }
-        let saved = events.filter { $0.kind == .wordSaved }.map(\.title)
-        if !saved.isEmpty {
-            lines += ["", "## Words Saved", ""] + saved.reversed().map { "- \($0)" }
-        }
-        let writings = events.filter { $0.kind == .writing }
-        if !writings.isEmpty {
-            lines += ["", "## Writing Test", ""]
-            for event in writings.reversed() {
-                lines.append("- \(event.title) (\(event.score ?? 0) pts)")
-                if let detail = event.detail { lines.append("  - \(detail)") }
-            }
-        }
-        return lines.joined(separator: "\n")
-    }
 }
 
 extension Array where Element == ActivityEvent {

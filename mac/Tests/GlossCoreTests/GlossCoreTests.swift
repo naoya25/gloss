@@ -482,3 +482,23 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     #expect(ChoiceQuiz.nextMastery(after: .known, correct: true) == .known)
     #expect(ChoiceQuiz.nextMastery(after: .known, correct: false) == .notYet)
 }
+
+@Test func growthCountsFirstCorrectSeparatelyForChoiceTests() {
+    let word = UUID(), other = UUID()
+    let day = Date(timeIntervalSince1970: 1_791_700_000)
+    let typed = ActivityEvent(kind: .wordQuiz, title: "Word Test", answers: [
+        WordAnswer(wordID: word, prompt: "", answer: "", verdict: .known),
+        WordAnswer(wordID: other, prompt: "", answer: "", verdict: .notYet),
+    ], date: day)
+    let again = ActivityEvent(kind: .meaningQuiz, title: "Meaning Test", answers: [WordAnswer(wordID: word, prompt: "", answer: "", verdict: .known)], date: day.addingTimeInterval(86_400))
+    let choice = ActivityEvent(kind: .wordQuiz, title: ChoiceQuiz.title, answers: [WordAnswer(wordID: other, prompt: "", answer: "", verdict: .known)], date: day)
+    let said = Growth.firstCorrect([again, typed, choice], choice: false)
+    #expect(said == [word: day])
+    #expect(Growth.firstCorrect([typed, choice], choice: true) == [other: day])
+    #expect(Growth.newlyCorrect(said, on: day) == [word])
+    #expect(Growth.cumulative(said, days: 3, until: day.addingTimeInterval(86_400)).map(\.value) == [0, 1, 1])
+}
+
+@Test func writingAverageUsesTheLastFiveScores() {
+    #expect(Growth.movingAverage([40, 60, 80, 100, 20, 100]) == [40, 50, 60, 70, 60, 72])
+}

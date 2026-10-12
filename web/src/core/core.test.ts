@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { cumulative, firstCorrect, movingAverage, newlyCorrect } from "./growth";
 import { isoSeconds, newID } from "./ids";
 import { Mastery, type ActivityEvent, type WordEntry } from "./models";
 import { lessonBrief } from "./lessonBrief";
@@ -159,5 +160,25 @@ describe("4-choice test", () => {
     expect(nextMastery(Mastery.Unsure, true)).toBe(Mastery.Known);
     expect(nextMastery(Mastery.Known, true)).toBe(Mastery.Known);
     expect(nextMastery(Mastery.Known, false)).toBe(Mastery.NotYet);
+  });
+});
+
+describe("growth", () => {
+  it("counts first correct answers, keeping 4-choice apart", () => {
+    const at = (day: number) => new Date(2026, 9, day, 12).toISOString();
+    const typed: ActivityEvent = { id: "1", date: at(10), kind: "wordQuiz", title: "Word Test", answers: [
+      { wordID: "a", prompt: "", answer: "", verdict: Mastery.Known },
+      { wordID: "b", prompt: "", answer: "", verdict: Mastery.NotYet },
+    ] };
+    const again: ActivityEvent = { id: "2", date: at(11), kind: "meaningQuiz", title: "Meaning Test", answers: [{ wordID: "a", prompt: "", answer: "", verdict: Mastery.Known }] };
+    const choice: ActivityEvent = { id: "3", date: at(10), kind: "wordQuiz", title: "4-Choice Test", answers: [{ wordID: "b", prompt: "", answer: "", verdict: Mastery.Known }] };
+    const said = firstCorrect([again, typed, choice], false);
+    expect([...said.keys()]).toEqual(["a"]);
+    expect([...firstCorrect([typed, choice], true).keys()]).toEqual(["b"]);
+    expect(newlyCorrect(said, new Date(2026, 9, 10))).toEqual(["a"]);
+    expect(cumulative(said, [new Date(2026, 9, 9), new Date(2026, 9, 10), new Date(2026, 9, 11)])).toEqual([0, 1, 1]);
+  });
+  it("averages the last five writing scores", () => {
+    expect(movingAverage([40, 60, 80, 100, 20, 100])).toEqual([40, 50, 60, 70, 60, 72]);
   });
 });
