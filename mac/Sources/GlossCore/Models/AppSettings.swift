@@ -8,6 +8,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var cardFace: CardFace = .english
     public var wordSort: WordSort = .recommended
     public var syncURL: String = ""
+    public var englishLevel: EnglishLevel = .thirty
 
     public init() {}
 
@@ -21,6 +22,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         cardFace = try container.decodeIfPresent(CardFace.self, forKey: .cardFace) ?? cardFace
         wordSort = try container.decodeIfPresent(WordSort.self, forKey: .wordSort) ?? wordSort
         syncURL = try container.decodeIfPresent(String.self, forKey: .syncURL) ?? syncURL
+        englishLevel = try container.decodeIfPresent(EnglishLevel.self, forKey: .englishLevel) ?? englishLevel
     }
 
     // TraPoP の設定(com.naoya-otsuka.trapop/config.json)を初回だけ引き継ぐ

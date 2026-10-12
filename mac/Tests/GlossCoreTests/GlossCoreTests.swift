@@ -556,3 +556,18 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     #expect(word.matches("  "))
     #expect(!word.matches("deploy"))
 }
+
+@Test func gradedTranslationRendersEachLevelFromOneAnswer() {
+    let source = "FYI, I pushed a hotfix for the login timeout. Let's check the edge case before we deploy to production."
+    let raw = "⟦FYI | 参考までに | 2⟧、⟦login timeout | ログインのタイムアウト | 3⟧に対する⟦hotfix | 緊急修正 | 4⟧をプッシュしました。⟦deploy to production | 本番に出す | 3⟧前に、⟦edge case | 想定外のケース | 4⟧を⟦check | 確認する | 1⟧しましょう。"
+    let graded = GradedTranslation.parse(raw, knownTerms: ["hotfix"], source: source)
+    #expect(graded.phrases.count == 6)
+    #expect(graded.japanese == "参考までに、ログインのタイムアウトに対する緊急修正をプッシュしました。本番に出す前に、想定外のケースを確認するしましょう。")
+    #expect(graded.rendered(.japanese).englishRate == 0)
+    let rates = [EnglishLevel.ten, .thirty, .fifty].map { graded.rendered($0).englishRate }
+    #expect(rates == rates.sorted())
+    #expect(graded.rendered(.ten).learnedTerms == ["hotfix"])
+    let ninety = graded.rendered(.ninety)
+    #expect(ninety.text.hasPrefix("FYI, I pushed a hotfix"))
+    #expect(ninety.englishRate >= 70)
+}

@@ -39,6 +39,10 @@ final class SettingsStore {
         state.wordSort = order
     }
 
+    func setEnglishLevel(_ level: EnglishLevel) {
+        state.englishLevel = level
+    }
+
     func setSyncURL(_ url: String) {
         state.syncURL = url
     }

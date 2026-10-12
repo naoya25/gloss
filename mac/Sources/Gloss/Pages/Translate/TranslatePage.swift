@@ -92,7 +92,7 @@ private struct TranslateControls: View {
             if translate.state.isFromCache {
                 CacheBadge()
             }
-            if let mixed = translate.state.mixed, translate.state.choice != .translatedAll, !mixed.kept.isEmpty {
+            if let mixed = translate.state.mixed, translate.state.level != .japanese {
                 Text("English \(mixed.englishRate)%")
                     .font(.callout.weight(.semibold).monospacedDigit())
                     .foregroundStyle(.tint)
@@ -139,9 +139,9 @@ private struct TranslationResult: View {
         !translate.state.selection.isEmpty && translate.state.selection != ask.state.focus
     }
 
-    // 覚えた表現を英語のまま残した訳。「全部日本語に」を選んだら、全文の和訳に切り替える
+    // 選んだ段階の訳。「日本語」の段階では、全文の和訳をそのまま出す
     private var mixedText: NSAttributedString? {
-        guard let mixed = translate.state.mixed, translate.state.choice != .translatedAll, !mixed.kept.isEmpty else { return nil }
+        guard let mixed = translate.state.mixed, translate.state.level != .japanese else { return nil }
         return MixedText.make(mixed)
     }
 
@@ -291,84 +291,69 @@ enum MixedText {
     }
 }
 
-// 英語を残した訳を読み終えたら、どちらかを選ぶ。このまま読めたら点、全部日本語にしたら点なし
+// 訳の中にどれくらい英語を残すかを5段階から選ぶ。読み終えたら記録して、英語の割合に応じた点をもらう
 private struct ReadChoiceRow: View {
     @Environment(TranslateStore.self) private var translate
 
     var body: some View {
         let state = translate.state
-        if let mixed = state.mixed, !mixed.kept.isEmpty, !state.isTranslating {
+        if let graded = state.graded, !graded.phrases.isEmpty, let mixed = state.mixed {
             VStack(spacing: 0) {
                 Divider()
-                Group {
-                    switch state.choice {
-                    case nil:
-                        VStack(alignment: .leading, spacing: 10) {
-                            KeptSummary(mixed: mixed)
-                            HStack(spacing: 12) {
-                                ChoiceButton(symbol: "checkmark", title: "Read It As Is", points: state.pendingPoints, isPrimary: true, action: translate.keepEnglish)
-                                    .keyboardShortcut(.return, modifiers: [.command, .shift])
-                                ChoiceButton(symbol: "character.bubble", title: "Translate All", points: 0, isPrimary: false, action: translate.translateAll)
-                            }
+                HStack(alignment: .center, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Picker("English", selection: Binding(get: { state.level }, set: translate.setLevel)) {
+                            ForEach(EnglishLevel.allCases.reversed()) { Text($0.label).tag($0) }
                         }
-                    case .keptEnglish:
-                        Label("+\(state.pendingPoints) pt — you read \(mixed.englishRate)% of it in English", systemImage: "star.fill")
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                        .help("How much of the translation to leave in English (⌘1–⌘5)")
+                        if state.level != .japanese {
+                            KeptSummary(mixed: mixed)
+                        }
+                    }
+                    Spacer()
+                    if state.isRead {
+                        Label("Read · +\(state.pendingPoints) pt", systemImage: "checkmark.circle.fill")
                             .font(.callout.weight(.semibold))
-                            .foregroundStyle(.orange)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    case .translatedAll:
-                        Label("Showing everything in Japanese. No points for this one.", systemImage: "character.bubble")
-                            .font(.callout)
                             .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if !state.isTranslating {
+                        Button {
+                            translate.markRead()
+                        } label: {
+                            Text("Done Reading  +\(state.pendingPoints) pt").monospacedDigit()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.return, modifiers: [.command, .shift])
+                        .help("Record that you read it at this level (⇧⌘↩)")
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
+                // ⌘1〜⌘5 で段階を選ぶ。1 が 90%、5 が日本語
+                .background {
+                    ForEach(Array(EnglishLevel.allCases.reversed().enumerated()), id: \.offset) { offset, level in
+                        Button("") { translate.setLevel(level) }
+                            .keyboardShortcut(KeyEquivalent(Character("\(offset + 1)")), modifiers: .command)
+                            .hidden()
+                    }
+                }
             }
             .transition(.opacity)
         }
     }
 }
 
-private struct ChoiceButton: View {
-    let symbol: String
-    let title: String
-    let points: Int
-    let isPrimary: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: symbol)
-                    .font(.title3)
-                    .foregroundStyle(isPrimary ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
-                Text(title).font(.body.weight(.medium))
-                Text("+\(points) pt")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(points > 0 ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
-            }
-            .frame(maxWidth: .infinity, minHeight: 64)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(isPrimary ? AnyShapeStyle(.green.opacity(0.5)) : AnyShapeStyle(.separator)))
-    }
-}
-
-// 英語のまま残した語を、覚えた語と、AI が足したやさしい語に分けて出す
+// 点の内訳。覚えた語は1語ごと、ほかは英語の割合 10% ごと
 private struct KeptSummary: View {
     let mixed: MixedTranslation
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
+            Text("\(mixed.englishRate)% in English · +\(Points.perTriedTerm) pt per 10%")
             if !mixed.learnedTerms.isEmpty {
                 Text("Learned (+\(Points.perKeptTerm) pt each): \(mixed.learnedTerms.joined(separator: ", "))")
-            }
-            if !mixed.triedTerms.isEmpty {
-                Text("Easy words to try (+\(Points.perTriedTerm) pt each): \(mixed.triedTerms.joined(separator: ", "))")
             }
         }
         .font(.callout)

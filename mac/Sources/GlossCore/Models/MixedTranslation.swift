@@ -18,6 +18,8 @@ public struct MixedTranslation: Equatable, Sendable {
     public var kept: [KeptTerm]
     // 残した表現も日本語にした、全文の和訳
     public var japanese: String
+    // 英語の原文を土台にした訳(90%)では、残した語句ではなく英字の数で英語の割合を数える
+    var englishOverride: Int? = nil
 
     public static let open: Character = "⟦"
     public static let close: Character = "⟧"
@@ -104,7 +106,12 @@ public struct MixedTranslation: Equatable, Sendable {
     }
 
     // 訳の中の英語の文字の割合(空白を除く)。0〜100
-    public var englishCharacters: Int { kept.map { $0.english.filter { !$0.isWhitespace }.count }.reduce(0, +) }
+    public var englishCharacters: Int { englishOverride ?? kept.map { $0.english.filter { !$0.isWhitespace }.count }.reduce(0, +) }
+
+    // 英語のまま読んだ点。覚えた語は1語ごとに、ほかは英語の割合 10% ごとに付ける。質問して確かめた語は数えない
+    public func readingPoints(excluding asked: Set<String>) -> Int {
+        learnedTerms.filter { !asked.contains($0.lowercased()) }.count * Points.perKeptTerm + englishRate / 10 * Points.perTriedTerm
+    }
     public var totalCharacters: Int { text.filter { !$0.isWhitespace }.count }
     public var englishRate: Int { totalCharacters == 0 ? 0 : englishCharacters * 100 / totalCharacters }
 

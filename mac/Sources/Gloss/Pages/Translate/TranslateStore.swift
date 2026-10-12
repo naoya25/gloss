@@ -14,24 +14,20 @@ struct TranslateState {
     // 訳が出たあとに抜き出して Book に入れた表現
     var extracted: [StudyChunk] = []
     var isExtracting = false
-    // 英文の訳で、覚えた表現(Book で ✓)を英語のまま残したもの
-    var mixed: MixedTranslation?
-    var choice: ReadChoice?
+    // 英文の訳。語句ごとに英語と日本語の両方を持ち、level の段階で読む
+    var graded: GradedTranslation?
+    var level: EnglishLevel = .thirty
+    // 読み終えて記録したか。記録したあとは段階を変えても点は変わらない
+    var isRead = false
     // 英語のまま残した表現のうち、質問して意味を確かめたもの。点にしない
     var askedTerms: Set<String> = []
 
-    var pendingPoints: Int { mixed?.points(excluding: askedTerms) ?? 0 }
-    var asksForChoice: Bool { choice == nil && !isTranslating && !(mixed?.kept.isEmpty ?? true) }
+    var mixed: MixedTranslation? { graded?.rendered(level) }
+    var pendingPoints: Int { level == .japanese ? 0 : mixed?.readingPoints(excluding: askedTerms) ?? 0 }
 
     var canTranslate: Bool {
         !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sourceImage != nil
     }
-}
-
-// 英語を残した訳を読んだあとの選び方。このままで読めたら点をもらい、全部日本語にしたら点は付かない
-enum ReadChoice {
-    case keptEnglish
-    case translatedAll
 }
 
 @MainActor
@@ -90,33 +86,30 @@ final class TranslateStore {
 
     // 質問した範囲に入っている、英語のまま残した表現は点から外す
     func noteAsked(_ text: String) {
-        guard let mixed = state.mixed, state.choice == nil else { return }
+        guard let mixed = state.mixed, !state.isRead else { return }
         let asked = text.lowercased()
         for term in mixed.keptTerms where asked.contains(term.lowercased()) || term.lowercased().contains(asked) {
             state.askedTerms.insert(term.lowercased())
         }
     }
 
-    func keepEnglish() {
-        choose(.keptEnglish)
+    // 段階を変えると、その場で訳を作り直す(AI は呼ばない)。次の訳もこの段階で始める
+    func setLevel(_ level: EnglishLevel) {
+        state.level = level
+        settings.setEnglishLevel(level)
     }
 
-    func translateAll() {
-        choose(.translatedAll)
-    }
-
-    // 選んだ時点で記録に残す。訳の中の英語の割合は、実際に読んだ訳で数える(全部日本語にしたら 0)
-    private func choose(_ choice: ReadChoice) {
-        guard let mixed = state.mixed, state.choice == nil else { return }
-        state.choice = choice
-        let keeps = choice == .keptEnglish
+    // 読み終えた時点で記録に残す。訳の中の英語の割合は、実際に読んだ段階の訳で数える(日本語にしたら 0)
+    func markRead() {
+        guard let mixed = state.mixed, !state.isRead else { return }
+        state.isRead = true
         activity.record(ActivityEvent(
             kind: .glossRead,
             title: history.state.items.first?.title ?? "",
-            score: keeps ? mixed.englishCharacters : 0,
-            total: keeps ? mixed.totalCharacters : mixed.japanese.filter { !$0.isWhitespace }.count,
-            detail: mixed.keptTerms.joined(separator: ", "),
-            points: keeps ? state.pendingPoints : 0
+            score: state.level == .japanese ? 0 : mixed.englishCharacters,
+            total: mixed.totalCharacters,
+            detail: "\(state.level.label) · " + mixed.keptTerms.joined(separator: ", "),
+            points: state.pendingPoints
         ))
     }
 
@@ -163,23 +156,6 @@ final class TranslateStore {
         Sentence.containing(expression, in: text ?? state.sourceText + "\n" + state.translation) ?? ""
     }
 
-    // 英語のまま残す語の数の目安。覚えた表現が足りないときは、やさしい語で埋める
-    static let keptTarget = 3
-
-    // 選べなかったときは、覚えた表現だけで訳す。翻訳の邪魔をしない
-    private func easyWords(for source: String, count: Int, excluding: [String]) async -> [String] {
-        guard count > 0 else { return [] }
-        var raw = ""
-        do {
-            for try await piece in settings.makeClient().stream([ChatMessage(.user, Prompts.easyWords(source: source, count: count, excluding: excluding))]) {
-                raw += piece
-            }
-        } catch {
-            return []
-        }
-        return Array(MixedTranslation.parseEasyWords(raw, source: source, excluding: excluding).prefix(count))
-    }
-
     // 同じ文を同じ翻訳先で訳したことがあれば、AI に送らず履歴の訳を出す。force で必ず訳し直す
     func translate(force: Bool = false) {
         let typed = state.sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -189,13 +165,13 @@ final class TranslateStore {
         state.error = nil
         state.extracted = []
         state.isExtracting = false
-        state.mixed = nil
-        state.choice = nil
+        state.graded = nil
+        state.level = settings.state.englishLevel
+        state.isRead = false
         state.askedTerms = []
         let target = settings.state.target
         // 英文を日本語にするときは、覚えた表現を英語のまま残す。覚えた表現は日々変わるので、履歴の訳は使わない
         let known = words.knownTerms.filter { MixedTranslation.contains($0, in: typed) }
-        let learning = words.learningTerms
         let mixes = state.sourceImage == nil && target != .english && MixedTranslation.isEnglish(typed)
         if !mixes, !force, state.sourceImage == nil, let hit = history.cached(source: typed, target: target) {
             state.translation = hit.translation
@@ -217,10 +193,8 @@ final class TranslateStore {
             var raw = ""
             do {
                 let messages: [ChatMessage]
-                var easy: [String] = []
                 if mixes {
-                    easy = await easyWords(for: typed, count: Self.keptTarget - known.count, excluding: known + learning)
-                    messages = [ChatMessage(.system, Prompts.mixedTranslation(keep: known + easy)), userMessage]
+                    messages = [ChatMessage(.system, Prompts.gradedTranslation(known: known)), userMessage]
                 } else {
                     messages = [ChatMessage(.system, Prompts.translation(target: target, hasImage: image != nil)), userMessage]
                 }
@@ -230,9 +204,9 @@ final class TranslateStore {
                     guard !Task.isCancelled else { return }
                     raw += chunk
                     if mixes {
-                        let mixed = MixedTranslation.parse(raw, knownTerms: known, triedTerms: easy, source: typed)
-                        state.mixed = mixed
-                        state.translation = mixed.japanese
+                        let graded = GradedTranslation.parse(raw, knownTerms: known, source: typed)
+                        state.graded = graded
+                        state.translation = graded.japanese
                     } else if image == nil {
                         state.translation = raw
                     } else {
