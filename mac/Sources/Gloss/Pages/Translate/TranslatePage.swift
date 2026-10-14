@@ -8,7 +8,6 @@ struct TranslatePage: View {
             TranslateControls()
             Divider()
             TranslationResult()
-            ReadChoiceRow()
             ExtractedWords()
         }
         .background(Color(nsColor: .textBackgroundColor))
@@ -92,12 +91,7 @@ private struct TranslateControls: View {
             if translate.state.isFromCache {
                 CacheBadge()
             }
-            if let mixed = translate.state.mixed, translate.state.level != .japanese {
-                Text("English \(mixed.englishRate)%")
-                    .font(.callout.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.tint)
-                    .help("Share of this translation left in English, because you already know those words")
-            }
+            ReadLevelControls()
             if translate.state.isTranslating {
                 ProgressView()
                     .controlSize(.small)
@@ -154,7 +148,8 @@ private struct TranslationResult: View {
             onMouseSelect: {
                 translate.noteAsked($0)
                 ask.askAboutMouseSelection($0, source: translate.state.sourceText, translation: translate.state.translation)
-            }
+            },
+            onClick: translate.reveal(at:)
         )
         .overlay { ResultMessage() }
         .frame(maxHeight: .infinity)
@@ -276,7 +271,7 @@ private struct AskSelectionButton: View {
     }
 }
 
-// 英語のまま残した表現は太字の色付きにする。指を置くと日本語が出る
+// 英語のまま残した表現は太字の色付きにする。日本語は押したときだけ出す(押した数で次の段階を決めるので、指を置いても出さない)
 enum MixedText {
     static func make(_ mixed: MixedTranslation) -> NSAttributedString {
         let result = NSMutableAttributedString(string: mixed.text, attributes: GlossTextView.attributes)
@@ -284,87 +279,71 @@ enum MixedText {
             result.addAttributes([
                 .font: NSFont.systemFont(ofSize: 15, weight: .semibold),
                 .foregroundColor: NSColor.controlAccentColor,
-                .toolTip: item.japanese,
+            ], range: item.range)
+        }
+        // 押して日本語にした語句は点線の下線にする。もう一度押すと英語に戻る
+        for item in mixed.revealedTerms {
+            result.addAttributes([
+                .underlineStyle: NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue,
+                .underlineColor: NSColor.controlAccentColor,
             ], range: item.range)
         }
         return result
     }
 }
 
-// 訳の中にどれくらい英語を残すかを5段階から選ぶ。読み終えたら記録して、英語の割合に応じた点をもらう
-private struct ReadChoiceRow: View {
+// 段階は、前に読んだ英文で英語のまま読めた割合の1段上から始まる。分からない英語を押すと日本語になり(もう一度押すと英語に戻る)、
+// 日本語のままの分だけ次の段階が下がる。読んだ記録は、次の英文を貼ったときに自動で残す。
+// 訳を読む高さを取るため、上の段に1行で置き、内訳は指を置いたときの説明に回す。段階は ⌘1〜⌘5 でも変えられる
+private struct ReadLevelControls: View {
     @Environment(TranslateStore.self) private var translate
 
     var body: some View {
         let state = translate.state
         if let graded = state.graded, !graded.phrases.isEmpty, let mixed = state.mixed {
-            VStack(spacing: 0) {
-                Divider()
-                HStack(alignment: .center, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Picker("English", selection: Binding(get: { state.level }, set: translate.setLevel)) {
-                            ForEach(EnglishLevel.allCases.reversed()) { Text($0.label).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
-                        .help("How much of the translation to leave in English (⌘1–⌘5)")
-                        if state.level != .japanese {
-                            KeptSummary(mixed: mixed, phraseCount: graded.phrases.count, level: state.level)
-                        }
-                    }
-                    Spacer()
-                    if state.isRead {
-                        Label("Read · +\(state.pendingPoints) pt", systemImage: "checkmark.circle.fill")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    } else if !state.isTranslating {
-                        Button {
-                            translate.markRead()
-                        } label: {
-                            Text("Done Reading  +\(state.pendingPoints) pt").monospacedDigit()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.return, modifiers: [.command, .shift])
-                        .help("Record that you read it at this level (⇧⌘↩)")
-                    }
+            HStack(spacing: 10) {
+                Picker("English", selection: Binding(get: { state.level }, set: translate.setLevel)) {
+                    ForEach(EnglishLevel.allCases.reversed()) { Text($0.label).tag($0) }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                // ⌘1〜⌘5 で段階を選ぶ。1 が 90%、5 が日本語
-                .background {
-                    ForEach(Array(EnglishLevel.allCases.reversed().enumerated()), id: \.offset) { offset, level in
-                        Button("") { translate.setLevel(level) }
-                            .keyboardShortcut(KeyEquivalent(Character("\(offset + 1)")), modifiers: .command)
-                            .hidden()
-                    }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+                .help("How much of the translation to leave in English (⌘1–⌘5)")
+                if let ability = state.ability, let next = state.nextLevel, !state.isTranslating {
+                    Text("\(ability)% → next \(next.label) · +\(state.pendingPoints) pt")
+                        .font(.callout.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.tint)
+                        .fixedSize()
+                        .help(Self.summary(mixed: mixed, phraseCount: graded.phrases.count, level: state.level, ability: ability, next: next))
                 }
             }
-            .transition(.opacity)
+            // ⌘1〜⌘5 で段階を選ぶ。1 が 90%、5 が日本語
+            .background {
+                ForEach(Array(EnglishLevel.allCases.reversed().enumerated()), id: \.offset) { offset, level in
+                    Button("") { translate.setLevel(level) }
+                        .keyboardShortcut(KeyEquivalent(Character("\(offset + 1)")), modifiers: .command)
+                        .hidden()
+                }
+            }
         }
     }
-}
 
-// 段階の % は「英語に戻せる語句のうち何割を英語にするか」。コードや表の多い文書では、訳全体の英語の割合はそれより低くなるので、両方を出す
-private struct KeptSummary: View {
-    let mixed: MixedTranslation
-    let phraseCount: Int
-    let level: EnglishLevel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if level == .ninety {
-                Text("The original English, with Japanese for the hardest phrases · \(mixed.englishRate)% of the text in English")
-            } else {
-                Text("\(Set(mixed.kept.map { $0.english.lowercased() }).count) of \(phraseCount) phrases in English · \(mixed.englishRate)% of the text")
-            }
-            Text("+\(Points.perTriedTerm) pt per 10% of the text in English")
-            if !mixed.learnedTerms.isEmpty {
-                Text("Learned (+\(Points.perKeptTerm) pt each): \(mixed.learnedTerms.joined(separator: ", "))")
-            }
+    // 段階の % は「英語に戻せる語句のうち何割を英語にするか」。コードや表の多い文書では、訳全体の英語の割合はそれより低くなるので、両方を出す
+    static func summary(mixed: MixedTranslation, phraseCount: Int, level: EnglishLevel, ability: Int, next: EnglishLevel) -> String {
+        var lines = [
+            "Click English you don't know to see it in Japanese. Click it again to go back to English.",
+            "Read \(ability)% in English, so the next text starts at \(next.label). Recorded when you paste the next text.",
+        ]
+        switch level {
+        case .japanese: lines.append("Everything in Japanese")
+        case .ninety: lines.append("The original English, with Japanese for the hardest phrases · \(mixed.englishRate)% of the text in English")
+        default: lines.append("\(Set(mixed.kept.map { $0.english.lowercased() }).count) of \(phraseCount) phrases in English · \(mixed.englishRate)% of the text")
         }
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .lineLimit(2)
+        lines.append("+\(Points.perTriedTerm) pt per 10% of the text in English")
+        if !mixed.learnedTerms.isEmpty {
+            lines.append("Learned (+\(Points.perKeptTerm) pt each): \(mixed.learnedTerms.joined(separator: ", "))")
+        }
+        return lines.joined(separator: "\n")
     }
 }

@@ -588,3 +588,37 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     #expect(graded.phrases.map(\.english) == ["push", "migrate"])
     #expect(graded.rendered(.fifty).text.contains("push しました"))
 }
+
+@Test func clickedPhrasesTurnJapaneseAndLowerTheNextLevel() {
+    let source = "FYI, I pushed a hotfix for the login timeout. Let's check the edge case before we deploy to production."
+    let raw = "⟦FYI | 参考までに | 2⟧、⟦login timeout | ログインのタイムアウト | 3⟧に対する⟦hotfix | 緊急修正 | 4⟧をプッシュしました。⟦deploy to production | 本番に出す | 3⟧前に、⟦edge case | 想定外のケース | 4⟧を⟦check | 確認する | 1⟧しましょう。"
+    let graded = GradedTranslation.parse(raw, knownTerms: ["hotfix"], source: source)
+    let fifty = graded.rendered(.fifty)
+    #expect(graded.readAbility(.fifty, revealed: []) == 50)
+    #expect(EnglishLevel.above(50) == .ninety)
+    // 押した語句は日本語になり、押した分だけ読めた割合が下がる
+    let all = Set(fifty.clickable.map { $0.english.lowercased() })
+    let clicked = graded.rendered(.fifty, revealed: ["hotfix"])
+    #expect(!clicked.keptTerms.contains("hotfix"))
+    #expect(clicked.text.contains("緊急修正"))
+    #expect(graded.readAbility(.fifty, revealed: ["hotfix"]) < 50)
+    #expect(graded.readAbility(.fifty, revealed: all) == 0)
+    // 日本語にした語句の位置を押すと、同じ語句が見つかる(もう一度押すと英語に戻せる)
+    let back = try! #require(clicked.revealedTerms.first)
+    #expect(back.english == "hotfix")
+    #expect((clicked.text as NSString).substring(with: back.range) == "緊急修正")
+    #expect(clicked.clickable(at: back.range.location)?.english == "hotfix")
+    #expect(EnglishLevel.above(0) == .ten)
+    #expect(EnglishLevel.above(25) == .thirty)
+    #expect(EnglishLevel.above(90) == .ninety)
+    #expect(graded.readAbility(.japanese, revealed: []) == 0)
+    // 90% は原文のまま、押した語句に日本語を添える
+    let ninety = graded.rendered(.ninety)
+    let check = try! #require(ninety.clickable.first { $0.english == "check" })
+    #expect(ninety.clickable(at: check.range.location)?.english == "check")
+    #expect(graded.rendered(.ninety, revealed: ["check"]).text.contains("check（確認する）"))
+    #expect(graded.readAbility(.ninety, revealed: ["check"]) < 90)
+    let glossedCheck = graded.rendered(.ninety, revealed: ["check"])
+    let checkBack = try! #require(glossedCheck.revealedTerms.first)
+    #expect((glossedCheck.text as NSString).substring(with: checkBack.range) == "check（確認する）")
+}

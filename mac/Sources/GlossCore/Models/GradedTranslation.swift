@@ -14,6 +14,11 @@ public enum EnglishLevel: Int, CaseIterable, Identifiable, Codable, Sendable {
     public var label: String {
         self == .japanese ? "日本語" : "\(rawValue)%"
     }
+
+    // 英語のまま読めた割合(0〜100)より1段上の段階。実力よりちょっと英語が多い訳で次の英文を読み、押した分だけ下がる
+    public static func above(_ ability: Int) -> EnglishLevel {
+        allCases.sorted { $0.rawValue < $1.rawValue }.first { $0.rawValue > ability } ?? .ninety
+    }
 }
 
 // 訳の中の英語の語句1つ。difficulty は AI が付けたやさしさ(1 やさしい〜5 難しい)。Book で ✓ の語は 0
@@ -115,21 +120,34 @@ public struct GradedTranslation: Equatable, Sendable {
         }.joined()
     }
 
-    // その段階で読む訳。日本語の段階は全文の和訳、90% は原文、その間は日本語の文に英語の語句を残す
-    public func rendered(_ level: EnglishLevel) -> MixedTranslation {
+    // その段階で読む訳。日本語の段階は全文の和訳、90% は原文、その間は日本語の文に英語の語句を残す。
+    // revealed は読みながら押して日本語にした語句(小文字の英語)
+    public func rendered(_ level: EnglishLevel, revealed: Set<String> = []) -> MixedTranslation {
         switch level {
         case .japanese:
             return MixedTranslation(text: japanese, kept: [], japanese: japanese)
         case .ninety:
-            return englishBased()
+            return englishBased(revealed: revealed)
         case .ten, .thirty, .fifty:
-            return japaneseBased(target: level.rawValue)
+            return japaneseBased(target: level.rawValue, revealed: revealed)
         }
+    }
+
+    // 英語で出した語句のうち、押さずに英語のまま読めた割合を、段階と同じ物差し(0〜100)で返す。
+    // 50% で出して半分の語句を押したら 25。日本語の段階は 0
+    public func readAbility(_ level: EnglishLevel, revealed: Set<String>) -> Int {
+        guard level != .japanese else { return 0 }
+        let shown = rendered(level).clickable
+        let size = { (item: KeptTerm) in item.english.filter { !$0.isWhitespace }.count }
+        let total = shown.map(size).reduce(0, +)
+        guard total > 0 else { return level.rawValue }
+        let read = shown.filter { !revealed.contains($0.english.lowercased()) }.map(size).reduce(0, +)
+        return level.rawValue * read / total
     }
 
     // ✓ の語は必ず英語にし、残りはやさしい語句から順に、英語に戻せる語句(の文字数)の target% まで英語に戻す。
     // 訳全体の文字数を目標にすると、コードや表・製品名の多い文書では語句を全部戻しても届かず、段階どうしが同じになるため
-    private func japaneseBased(target: Int) -> MixedTranslation {
+    private func japaneseBased(target: Int, revealed: Set<String>) -> MixedTranslation {
         let size = phrases.map { $0.english.filter { !$0.isWhitespace }.count }
         let goal = Double(size.reduce(0, +)) * Double(target) / 100
         var keep = Set(phrases.indices.filter { phrases[$0].isLearned })
@@ -142,10 +160,12 @@ public struct GradedTranslation: Equatable, Sendable {
             keep.insert(index)
             kept = next
         }
-        return mixed(keeping: keep)
+        return mixed(keeping: keep, revealed: revealed)
     }
 
-    private func mixed(keeping keep: Set<Int>) -> MixedTranslation {
+    // keep の語句を英語で入れ、そのうち押した語句(revealed)は日本語に戻す。日本語に戻した語句も、もう一度押せば英語に戻せるよう位置を持つ
+    private func mixed(keeping shown: Set<Int>, revealed: Set<String> = []) -> MixedTranslation {
+        let keep = shown.filter { !revealed.contains(phrases[$0].english.lowercased()) }
         var phraseIndex = -1
         let raw = segments.map { segment -> String in
             switch segment {
@@ -157,31 +177,71 @@ public struct GradedTranslation: Equatable, Sendable {
             }
         }.joined()
         let kept = keep.map { phrases[$0] }
-        return MixedTranslation.parse(raw, knownTerms: kept.filter(\.isLearned).map(\.english), triedTerms: kept.filter { !$0.isLearned }.map(\.english))
+        var result = MixedTranslation.parse(raw, knownTerms: kept.filter(\.isLearned).map(\.english), triedTerms: kept.filter { !$0.isLearned }.map(\.english))
+        guard keep.count < shown.count else { return result }
+        // 段落の文字と語句を順にたどって、日本語に戻した語句の位置を探す(英語と日本語の間に足した空白は飛ばす)
+        let text = result.text as NSString
+        var cursor = 0
+        phraseIndex = -1
+        for segment in segments {
+            var piece = ""
+            var back: GlossedPhrase?
+            switch segment {
+            case let .plain(plain):
+                piece = plain
+            case let .phrase(phrase):
+                phraseIndex += 1
+                piece = keep.contains(phraseIndex) ? phrase.english : phrase.japanese
+                if shown.contains(phraseIndex), !keep.contains(phraseIndex) { back = phrase }
+            }
+            guard !piece.isEmpty else { continue }
+            let found = text.range(of: piece, range: NSRange(location: cursor, length: text.length - cursor))
+            guard found.location != NSNotFound else { continue }
+            if let back {
+                result.revealedTerms.append(KeptTerm(range: found, english: back.english, japanese: back.japanese, term: back.english, isLearned: back.isLearned))
+            }
+            cursor = NSMaxRange(found)
+        }
+        return result
     }
 
-    // 原文のまま読み、難しい語句から順に、全体の 1 割ほどまで日本語を添える。✓ の語は色を付けて見せる
-    private func englishBased() -> MixedTranslation {
+    // 原文のまま読み、難しい語句から順に、全体の 1 割ほどまで日本語を添える。押した語句にも日本語を添える。
+    // 日本語を添えていない語句は押せるようにし、✓ の語は色を付けて見せる
+    private func englishBased(revealed: Set<String>) -> MixedTranslation {
         var text = source
         let total = source.filter { !$0.isWhitespace }.count
         var glossed = 0
-        for phrase in phrases.filter({ !$0.isLearned }).sorted(by: { $0.difficulty > $1.difficulty }) {
-            guard glossed * 10 < total else { break }
+        func gloss(_ phrase: GlossedPhrase) -> Int {
             let pattern = "(?<![A-Za-z])" + NSRegularExpression.escapedPattern(for: phrase.english) + "(?![A-Za-z])(?!（)"
-            guard let range = text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) else { continue }
+            guard let range = text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) else { return 0 }
             let note = "（\(phrase.japanese)）"
             text.insert(contentsOf: note, at: range.upperBound)
-            glossed += note.count
+            return note.count
         }
-        var kept: [KeptTerm] = []
-        for phrase in phrases where phrase.isLearned {
-            let pattern = "(?<![A-Za-z])" + NSRegularExpression.escapedPattern(for: phrase.english) + "(?![A-Za-z])"
-            guard let range = text.range(of: pattern, options: [.regularExpression, .caseInsensitive]),
-                  !kept.contains(where: { $0.term == phrase.english })
-            else { continue }
-            kept.append(KeptTerm(range: NSRange(range, in: text), english: phrase.english, japanese: phrase.japanese, term: phrase.english, isLearned: true))
+        for phrase in phrases.filter({ !$0.isLearned }).sorted(by: { $0.difficulty > $1.difficulty }) {
+            guard glossed * 10 < total else { break }
+            glossed += gloss(phrase)
         }
-        return MixedTranslation(text: text, kept: kept, japanese: japanese, englishOverride: Self.latinCount(text))
+        for phrase in phrases where revealed.contains(phrase.english.lowercased()) {
+            _ = gloss(phrase)
+        }
+        // 押して日本語を添えた語句は、もう一度押せば日本語を外せるよう「英語（日本語）」の位置を持つ
+        var back: [KeptTerm] = []
+        for phrase in phrases where revealed.contains(phrase.english.lowercased()) && !back.contains(where: { $0.english == phrase.english }) {
+            let pattern = "(?<![A-Za-z])" + NSRegularExpression.escapedPattern(for: phrase.english) + "（" + NSRegularExpression.escapedPattern(for: phrase.japanese) + "）"
+            guard let range = text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) else { continue }
+            back.append(KeptTerm(range: NSRange(range, in: text), english: phrase.english, japanese: phrase.japanese, term: phrase.english, isLearned: phrase.isLearned))
+        }
+        var clickable: [KeptTerm] = []
+        for phrase in phrases where !clickable.contains(where: { $0.english.lowercased() == phrase.english.lowercased() }) {
+            let pattern = "(?<![A-Za-z])" + NSRegularExpression.escapedPattern(for: phrase.english) + "(?![A-Za-z])(?!（)"
+            guard let range = text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) else { continue }
+            clickable.append(KeptTerm(range: NSRange(range, in: text), english: phrase.english, japanese: phrase.japanese, term: phrase.english, isLearned: phrase.isLearned))
+        }
+        return MixedTranslation(
+            text: text, kept: clickable.filter(\.isLearned), japanese: japanese,
+            englishOverride: Self.latinCount(text), clickableOverride: clickable, revealedTerms: back
+        )
     }
 
     static func latinCount(_ text: String) -> Int {

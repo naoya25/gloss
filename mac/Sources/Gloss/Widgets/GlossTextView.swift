@@ -5,6 +5,8 @@ final class GlossNSTextView: NSTextView {
     var onImage: ((Data) -> Void)?
     var onPasteText: (() -> Void)?
     var onMouseSelect: ((String) -> Void)?
+    // 選ばずに1回押したときの、押した文字の位置
+    var onClick: ((Int) -> Void)?
 
     // super の mouseDown はマウスを離すまで戻らないので、戻った時点で選択は確定している。
     // ダブルクリックの単語も、ドラッグで選んだフレーズも、ここで質問に回す
@@ -24,8 +26,22 @@ final class GlossNSTextView: NSTextView {
     override func mouseDown(with event: NSEvent) {
         super.mouseDown(with: event)
         let range = selectedRange()
-        guard range.length > 0 else { return }
+        guard range.length > 0 else {
+            if event.clickCount == 1, let location = characterIndex(at: event) { onClick?(location) }
+            return
+        }
         onMouseSelect?((string as NSString).substring(with: range))
+    }
+
+    // 文字の上を押したときだけ、その文字の位置を返す。行末の余白を押したときは nil
+    private func characterIndex(at event: NSEvent) -> Int? {
+        guard let layoutManager, let textContainer else { return nil }
+        let point = convert(event.locationInWindow, from: nil)
+        let inContainer = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+        let glyph = layoutManager.glyphIndex(for: inContainer, in: textContainer)
+        let rect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: textContainer)
+        guard rect.contains(inContainer) else { return nil }
+        return layoutManager.characterIndexForGlyph(at: glyph)
     }
 
     // プレーンテキストの NSTextView は画像の型を読めないので、画像だけのクリップボード
@@ -85,6 +101,7 @@ struct GlossTextView: NSViewRepresentable {
     var onImage: ((Data) -> Void)?
     var onPasteText: (() -> Void)?
     var onMouseSelect: ((String) -> Void)?
+    var onClick: ((Int) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -122,6 +139,7 @@ struct GlossTextView: NSViewRepresentable {
         textView.onImage = onImage
         textView.onPasteText = onPasteText
         textView.onMouseSelect = onMouseSelect
+        textView.onClick = onClick
         if let attributedText {
             if context.coordinator.shownAttributed != attributedText {
                 context.coordinator.shownAttributed = attributedText

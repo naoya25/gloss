@@ -20,6 +20,19 @@ public struct MixedTranslation: Equatable, Sendable {
     public var japanese: String
     // 英語の原文を土台にした訳(90%)では、残した語句ではなく英字の数で英語の割合を数える
     var englishOverride: Int? = nil
+    // 英語原文の訳(90%)では、色を付けない語句も押して日本語にできる
+    var clickableOverride: [KeptTerm]? = nil
+
+    // 押して日本語にした語句。range は日本語(90% は「英語（日本語）」)の位置で、もう一度押すと英語に戻る
+    public internal(set) var revealedTerms: [KeptTerm] = []
+
+    // 押すと日本語になる、英語のままの語句
+    public var clickable: [KeptTerm] { clickableOverride ?? kept }
+
+    // その位置にある、押せる語句。英語のままの語句と、日本語にした語句の両方を探す
+    public func clickable(at location: Int) -> KeptTerm? {
+        (clickable + revealedTerms).first { NSLocationInRange(location, $0.range) }
+    }
 
     public static let open: Character = "⟦"
     public static let close: Character = "⟧"

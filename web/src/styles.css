@@ -222,5 +222,8 @@ button:disabled { opacity: 0.6; }
 .translate .levels button { flex: 1; }
 .translate .level-note { margin: 6px 0 12px; }
 .translation { white-space: pre-wrap; line-height: 1.9; font-size: 17px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.translation button { all: unset; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .translation .kept { color: var(--en); font-weight: 600; }
+.translation .revealed { text-decoration: underline dotted var(--en); text-underline-offset: 4px; }
+.translate .level-hint { margin: 0 0 8px; font-weight: 600; }
 button.link { border: 0; background: transparent; color: var(--accent); font-size: 15px; min-height: 44px; }

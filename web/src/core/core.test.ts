@@ -6,7 +6,7 @@ import { lessonBrief } from "./lessonBrief";
 import { choiceOptions, isExactAnswer, nextMastery, pickQuestions, questionWeight } from "./quiz";
 import { bookSize, lastDays, quizTotals, streak } from "./report";
 import { pickVoice } from "./speech";
-import { japaneseOf, joinGraded, parseGraded, phrasesOf, readingPoints, render, splitParts } from "./graded";
+import { japaneseOf, joinGraded, levelAbove, parseGraded, phrasesOf, readAbility, readingPoints, render, splitParts } from "./graded";
 import { matchesQuery, recallStreaks } from "./recall";
 import { sortWords } from "../pages/book/store";
 import { activityRow, didPushWords, mergeActivity, mergeWords, wordRows } from "./sync";
@@ -237,6 +237,27 @@ describe("graded translation", () => {
     expect(render(graded, 50).text).toContain("push しました");
     expect(render(graded, 90).text.startsWith("FYI, I pushed a hotfix")).toBe(true);
     expect(readingPoints(render(graded, 0), 0)).toBe(0);
+  });
+  it("turns tapped phrases into Japanese and lowers the next level, like the Mac", () => {
+    const graded = parseGraded(raw, ["hotfix"], source);
+    expect(readAbility(graded, 50, new Set())).toBe(50);
+    expect(levelAbove(50)).toBe(90);
+    const tapped = render(graded, 50, new Set(["hotfix"]));
+    expect(tapped.kept.map((k) => k.english)).not.toContain("hotfix");
+    expect(tapped.text).toContain("緊急修正");
+    expect(readAbility(graded, 50, new Set(["hotfix"]))).toBeLessThan(50);
+    const all = new Set(render(graded, 50).clickable.map((k) => k.english.toLowerCase()));
+    expect(readAbility(graded, 50, all)).toBe(0);
+    const back = tapped.revealed[0]!;
+    expect(back.english).toBe("hotfix");
+    expect(tapped.text.slice(back.start, back.end)).toBe("緊急修正");
+    expect([levelAbove(0), levelAbove(25), levelAbove(90)]).toEqual([10, 30, 90]);
+    expect(readAbility(graded, 0, new Set())).toBe(0);
+    const ninety = render(graded, 90);
+    expect(ninety.clickable.map((k) => k.english)).toContain("check");
+    const glossed = render(graded, 90, new Set(["check"]));
+    expect(glossed.text.slice(glossed.revealed[0]!.start, glossed.revealed[0]!.end)).toBe("check（確認）");
+    expect(readAbility(graded, 90, new Set(["check"]))).toBeLessThan(90);
   });
   it("splits long text into paragraph groups and joins them back", () => {
     const paragraph = "word ".repeat(100);

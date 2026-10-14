@@ -1,12 +1,23 @@
-import { Fragment, type ReactNode } from "react";
-import { LEVELS, phrasesOf, readingPoints, render } from "../../core/graded";
+import { Fragment, useEffect, type ReactNode } from "react";
+import { LEVELS, levelAbove, phrasesOf, readAbility, readingPoints, render, type Kept } from "../../core/graded";
 import { useTranslate } from "./store";
 
 export function TranslatePage() {
-  const { source, graded, level, translating, progress, error, read, setSource, setLevel, translate, markRead, reset } = useTranslate();
-  const rendered = graded ? render(graded, level) : null;
+  const { source, graded, level, translating, progress, error, revealed, setSource, setLevel, reveal, translate, recordReading, reset } = useTranslate();
+  const rendered = graded ? render(graded, level, revealed) : null;
   const phrases = graded ? phrasesOf(graded).length : 0;
   const points = rendered ? readingPoints(rendered, level) : 0;
+  const ability = graded ? readAbility(graded, level, revealed) : 0;
+
+  // ページを閉じたときに、そこまで読んだ分を記録する。ほかの画面に移っただけなら記録しない
+  // (記録したあとは押せなくなるので、戻ってきて続きを読めなくなる)。戻れる形で隠れたとき(persisted)も記録しない
+  useEffect(() => {
+    const onHide = (event: PageTransitionEvent) => {
+      if (!event.persisted) recordReading();
+    };
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [recordReading]);
 
   return (
     <section className="page translate">
@@ -36,6 +47,7 @@ export function TranslatePage() {
       {error && <p className="error">{error}</p>}
       {graded && rendered && (
         <>
+          {level !== 0 && <p className="level-hint">Tap English you don't know to see it in Japanese</p>}
           <div className="segmented levels" role="group" aria-label="English in the translation">
             {LEVELS.map((item) => (
               <button key={item.level} type="button" aria-pressed={level === item.level} onClick={() => setLevel(item.level)}>
@@ -51,19 +63,13 @@ export function TranslatePage() {
                 : `${new Set(rendered.kept.map((item) => item.english.toLowerCase())).size} of ${phrases} phrases in English · ${rendered.englishRate}% of the text`}
           </p>
           <div className="translation">
-            <MixedText text={rendered.text} kept={rendered.kept} />
+            <MixedText text={rendered.text} kept={rendered.kept} clickable={[...rendered.clickable, ...rendered.revealed]} revealed={rendered.revealed} onReveal={reveal} />
           </div>
           {translating && <p className="sub">Translating… {progress[0]}/{progress[1]}</p>}
           {!translating && (
-            <div className="actions">
-              {read ? (
-                <span className="sub">Read · +{points} pt</span>
-              ) : (
-                <button type="button" className="primary" onClick={markRead}>
-                  Done Reading +{points} pt
-                </button>
-              )}
-            </div>
+            <p className="sub">
+              Read {ability}% in English · next text at {LEVELS.find((item) => item.level === levelAbove(ability))!.label} · +{points} pt
+            </p>
           )}
         </>
       )}
@@ -71,20 +77,23 @@ export function TranslatePage() {
   );
 }
 
-// 英語のまま残した語句は太字の色付きにする。押すと日本語が出る(title)
-function MixedText({ text, kept }: { text: string; kept: { start: number; end: number; japanese: string; learned: boolean }[] }) {
+// 英語のまま残した語句は太字の色付きにする(90% では ✓ の語だけ)。押すと日本語になり、押した分だけ次の段階が下がる。
+// 押した数で段階を決めるので、title で日本語を出さない
+function MixedText({ text, kept, clickable, revealed, onReveal }: { text: string; kept: Kept[]; clickable: Kept[]; revealed: Kept[]; onReveal: (english: string) => void }) {
+  const colored = new Set(kept.map((item) => item.start));
+  const back = new Set(revealed.map((item) => item.start));
   const pieces: ReactNode[] = [];
   let at = 0;
-  kept
+  clickable
     .slice()
     .sort((a, b) => a.start - b.start)
     .forEach((item, i) => {
       if (item.start < at) return;
       pieces.push(<Fragment key={`t${i}`}>{text.slice(at, item.start)}</Fragment>);
       pieces.push(
-        <b key={`k${i}`} className={item.learned ? "kept learned" : "kept"} title={item.japanese}>
+        <button key={`k${i}`} type="button" className={back.has(item.start) ? "revealed" : !colored.has(item.start) ? "phrase" : item.learned ? "kept learned" : "kept"} onClick={() => onReveal(item.english)}>
           {text.slice(item.start, item.end)}
-        </b>,
+        </button>,
       );
       at = item.end;
     });

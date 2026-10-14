@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { containsWord, isEnglish, joinGraded, parseGraded, render, readingPoints, splitParts, type Graded, type Level } from "../../core/graded";
+import { containsWord, isEnglish, joinGraded, levelAbove, parseGraded, phrasesOf, readAbility, render, readingPoints, splitParts, type Graded, type Level } from "../../core/graded";
 import { Mastery } from "../../core/models";
 import { useActivity } from "../../stores/activity";
 import { currentApi } from "../../stores/sync";
@@ -16,6 +16,14 @@ function savedLevel(): Level {
   }
 }
 
+function storeLevel(level: Level) {
+  try {
+    localStorage.setItem(LEVEL_KEY, String(level));
+  } catch {
+    // 保存できなくても、この画面では選んだ段階で読める
+  }
+}
+
 interface TranslateState {
   source: string;
   graded: Graded | null;
@@ -24,11 +32,15 @@ interface TranslateState {
   // 訳せた段落のまとまりの数と、全部の数
   progress: [number, number];
   error: string | null;
+  // 記録したか。次の英文を訳すとき・New を押したとき・ページを閉じたときに1回だけ記録する
   read: boolean;
+  // 読みながら押して日本語にした語句(小文字の英語)
+  revealed: Set<string>;
   setSource: (text: string) => void;
   setLevel: (level: Level) => void;
+  reveal: (english: string) => void;
   translate: () => Promise<void>;
-  markRead: () => void;
+  recordReading: () => void;
   reset: () => void;
 }
 
@@ -41,16 +53,26 @@ export const useTranslate = create<TranslateState>()((setState, getState) => ({
   progress: [0, 0],
   error: null,
   read: false,
+  revealed: new Set(),
   setSource: (source) => setState({ source }),
   setLevel(level) {
     setState({ level });
-    try {
-      localStorage.setItem(LEVEL_KEY, String(level));
-    } catch {
-      // 保存できなくても、この画面では選んだ段階で読める
-    }
+    storeLevel(level);
   },
-  reset: () => setState({ source: "", graded: null, translating: false, progress: [0, 0], error: null, read: false }),
+  // 押した語句を日本語にする。日本語にした語句をもう一度押すと英語に戻す
+  reveal(english) {
+    if (getState().read) return;
+    const key = english.toLowerCase();
+    setState((state) => {
+      const revealed = new Set(state.revealed);
+      if (!revealed.delete(key)) revealed.add(key);
+      return { revealed };
+    });
+  },
+  reset() {
+    getState().recordReading();
+    setState({ source: "", graded: null, translating: false, progress: [0, 0], error: null, read: false, revealed: new Set() });
+  },
   async translate() {
     const source = getState().source.trim();
     if (!source || getState().translating) return;
@@ -66,7 +88,8 @@ export const useTranslate = create<TranslateState>()((setState, getState) => ({
       .map((word) => word.english || word.term)
       .filter((term) => containsWord(term, source));
     const parts = splitParts(source);
-    setState({ graded: null, translating: true, progress: [0, parts.length], error: null, read: false });
+    getState().recordReading();
+    setState({ graded: null, level: savedLevel(), translating: true, progress: [0, parts.length], error: null, read: false, revealed: new Set() });
     const done: Graded[] = [];
     try {
       for (const part of parts) {
@@ -82,11 +105,12 @@ export const useTranslate = create<TranslateState>()((setState, getState) => ({
       setState({ translating: false });
     }
   },
-  // 読み終えた時点で記録に残す。英語の割合は、読んだ段階の訳で数える
-  markRead() {
-    const { graded, level, read, source } = getState();
-    if (!graded || read) return;
-    const rendered = render(graded, level);
+  // 読み終えた分を記録する(Mac の recordReading と同じ)。英語のまま読めた割合の1段上を次の英文の段階にし、
+  // 押した語句は Book で ? にする(Book に無い語句は Mac で入る)
+  recordReading() {
+    const { graded, level, read, revealed, source, translating } = getState();
+    if (!graded || read || translating || !phrasesOf(graded).length) return;
+    const rendered = render(graded, level, revealed);
     setState({ read: true });
     useActivity.getState().record({
       kind: "glossRead",
@@ -96,5 +120,12 @@ export const useTranslate = create<TranslateState>()((setState, getState) => ({
       detail: `${level === 0 ? "日本語" : `${level}%`} · ${[...new Set(rendered.kept.map((item) => item.english))].join(", ")}`,
       points: readingPoints(rendered, level),
     });
+    // 今の訳の段階は変えず、次の英文から使う
+    storeLevel(levelAbove(readAbility(graded, level, revealed)));
+    const words = useWords.getState();
+    for (const word of words.words) {
+      const term = (word.english || word.term).toLowerCase();
+      if (revealed.has(term) && word.mastery !== Mastery.NotYet && word.mastery !== Mastery.Unsure) words.setMastery(word.id, Mastery.Unsure);
+    }
   },
 }));
