@@ -1,2 +1,6 @@
 node_modules/
 dist/
+# 素の tsc でできるビルドの残り。vite は .tsx より先に .js を拾う
+src/**/*.js
+vite.config.js
+*.tsbuildinfo
