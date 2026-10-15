@@ -270,6 +270,30 @@ function englishBased(graded: Graded, revealed: Set<string>): Rendered {
   };
 }
 
+// 訳の一続きの文字(Mac の MixedRun と同じ)。kept は色を付けた英語、phrase は色を付けずに押せる英語(90%)、revealed は押して日本語にした語句
+export interface Run {
+  text: string;
+  kind: "plain" | "kept" | "phrase" | "revealed";
+  item?: Kept;
+}
+
+// 訳を、普通の文字と押せる語句の並びにする。語句が重なったときは先に始まるほうを取る
+export function runsOf(rendered: Rendered): Run[] {
+  const colored = new Set(rendered.kept.map((item) => item.start));
+  const back = new Set(rendered.revealed.map((item) => item.start));
+  const runs: Run[] = [];
+  let at = 0;
+  for (const item of [...rendered.clickable, ...rendered.revealed].sort((a, b) => a.start - b.start)) {
+    if (item.start < at) continue;
+    if (item.start > at) runs.push({ text: rendered.text.slice(at, item.start), kind: "plain" });
+    const kind = back.has(item.start) ? "revealed" : colored.has(item.start) ? "kept" : "phrase";
+    runs.push({ text: rendered.text.slice(item.start, item.end), kind, item });
+    at = item.end;
+  }
+  if (at < rendered.text.length) runs.push({ text: rendered.text.slice(at), kind: "plain" });
+  return runs;
+}
+
 // 英語のまま読んだ点。覚えた語は1語ごとに 10 点、ほかは英語の割合 10% ごとに 5 点(Mac の readingPoints と同じ)
 export function readingPoints(rendered: Rendered, level: Level): number {
   if (level === 0) return 0;

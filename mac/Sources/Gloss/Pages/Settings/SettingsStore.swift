@@ -44,6 +44,10 @@ final class SettingsStore {
         state.recentReads = recentReads
     }
 
+    func setSideBySide(_ sideBySide: Bool) {
+        state.sideBySide = sideBySide
+    }
+
     func setSyncURL(_ url: String) {
         state.syncURL = url
     }

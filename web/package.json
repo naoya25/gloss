@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "idb-keyval": "6.3.0",
+    "markdown-it": "15.0.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zustand": "5.0.15"

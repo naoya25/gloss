@@ -227,3 +227,18 @@ button:disabled { opacity: 0.6; }
 .translation .revealed { text-decoration: underline dotted var(--en); text-underline-offset: 4px; }
 .translate .level-hint { margin: 0 0 8px; font-weight: 600; }
 button.link { border: 0; background: transparent; color: var(--accent); font-size: 15px; min-height: 44px; }
+.markdown-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--sub); margin-bottom: 6px; }
+.translation.markdown { white-space: normal; }
+.translation.markdown > :first-child { margin-top: 0; }
+.translation.markdown > :last-child { margin-bottom: 0; }
+.translation.markdown h1, .translation.markdown h2, .translation.markdown h3 { line-height: 1.4; margin: 1em 0 0.4em; }
+.translation.markdown h1 { font-size: 22px; }
+.translation.markdown h2 { font-size: 19px; }
+.translation.markdown h3 { font-size: 17px; }
+.translation.markdown p, .translation.markdown ul, .translation.markdown ol, .translation.markdown blockquote, .translation.markdown pre { margin: 0 0 0.8em; }
+.translation.markdown ul, .translation.markdown ol { padding-left: 1.4em; }
+.translation.markdown blockquote { padding-left: 12px; border-left: 3px solid var(--line); opacity: 0.8; }
+.translation.markdown code { font-family: ui-monospace, Menlo, monospace; font-size: 0.9em; }
+.translation.markdown pre { white-space: pre-wrap; overflow-x: auto; padding: 10px 12px; border-radius: 8px; background: var(--line); line-height: 1.5; }
+.translation.markdown table { display: block; overflow-x: auto; border-collapse: collapse; margin: 0 0 0.8em; }
+.translation.markdown th, .translation.markdown td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; line-height: 1.5; }

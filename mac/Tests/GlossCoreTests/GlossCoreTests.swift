@@ -81,6 +81,7 @@ import Testing
     let decodedSettings = try decoder.decode(AppSettings.self, from: Data(settings.utf8))
     #expect(decodedSettings.engine == .openai)
     #expect(decodedSettings.wordSort == .recommended)
+    #expect(!decodedSettings.sideBySide)
 }
 
 @Test func cardPairIsParsed() throws {
@@ -640,4 +641,38 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     #expect(EnglishLevel.fifty.next(ability: 25, recent: [50, 50, 50, 50]) == (.thirty, []))
     #expect(EnglishLevel.ninety.next(ability: 90, recent: [90, 90, 90, 90]).level == .ninety)
     #expect(EnglishLevel.japanese.next(ability: 0, recent: [0, 0, 0, 0]).level == .ten)
+}
+
+@Test func runsSplitTheTranslationIntoTextAndClickablePhrases() throws {
+    let source = "# Release notes\n\n- **Fix** the login timeout\n- Check the edge case"
+    let raw = "# ⟦release notes | リリースノート | 2⟧\n\n- **⟦fix | 修正 | 1⟧** ⟦login timeout | ログインのタイムアウト | 3⟧\n- ⟦edge case | 想定外のケース | 4⟧を⟦check | 確認 | 1⟧する"
+    let graded = GradedTranslation.parse(raw, knownTerms: ["check"], source: source)
+    for level in EnglishLevel.allCases {
+        for revealed in [Set<String>(), ["check", "fix"]] {
+            let mixed = graded.rendered(level, revealed: revealed)
+            #expect(mixed.runs.map(\.text).joined() == mixed.text)
+        }
+    }
+    let fifty = graded.rendered(.fifty, revealed: ["fix"])
+    #expect(fifty.runs.first { $0.term?.english == "fix" }.map { [$0.text, "\($0.kind)"] } == ["修正", "revealed"])
+    #expect(fifty.runs.first { $0.term?.english == "check" }?.kind == .kept)
+    #expect(graded.rendered(.ninety).runs.first { $0.term?.english == "fix" }?.kind == .phrase)
+}
+
+@Test func markdownKeepsClickablePhrasesAfterRendering() throws {
+    let source = "# Release notes\n\n- **Fix** the login timeout\n- Check the edge case\n\n| Name | State |\n| --- | --- |\n| hotfix | done |"
+    let raw = "# ⟦release notes | リリースノート | 2⟧\n\n- **⟦fix | 修正 | 1⟧** ⟦login timeout | ログインのタイムアウト | 3⟧\n- ⟦edge case | 想定外のケース | 4⟧を⟦check | 確認 | 1⟧する\n\n| 名前 | 状態 |\n| --- | --- |\n| ⟦hotfix | 緊急修正 | 4⟧ | 完了 |"
+    let graded = GradedTranslation.parse(raw, knownTerms: ["check"], source: source)
+    #expect(MarkdownText.looksLikeMarkdown(source))
+    #expect(!MarkdownText.looksLikeMarkdown("FYI, I pushed a hotfix. Let's check it."))
+    let mixed = graded.rendered(.fifty, revealed: ["fix"])
+    let pieces = MarkdownText.pieces(mixed.runs)
+    let text = pieces.map(\.text).joined()
+    #expect(!text.contains("#") && !text.contains("**") && !text.contains("|"))
+    #expect(text.contains("• "))
+    let fix = try #require(pieces.first { $0.run?.term?.english == "fix" })
+    #expect(fix.text == "修正" && fix.bold && fix.run?.kind == .revealed)
+    #expect(pieces.first { $0.run?.term?.english == "release notes" }?.block == .heading(1))
+    #expect(pieces.first { $0.run?.term?.english == "hotfix" }?.block == .tableCell)
+    #expect(Set(pieces.compactMap { $0.run?.term?.english }) == Set(mixed.runs.compactMap { $0.term?.english }))
 }

@@ -177,44 +177,35 @@ public struct GradedTranslation: Equatable, Sendable {
 
     // keep の語句を英語で入れ、そのうち押した語句(revealed)は日本語に戻す。日本語に戻した語句も、もう一度押せば英語に戻せるよう位置を持つ
     private func mixed(keeping shown: Set<Int>, revealed: Set<String> = []) -> MixedTranslation {
-        let keep = shown.filter { !revealed.contains(phrases[$0].english.lowercased()) }
+        var text = ""
+        var kept: [KeptTerm] = []
+        var back: [KeptTerm] = []
+        var spacesNext = false
         var phraseIndex = -1
-        let raw = segments.map { segment -> String in
-            switch segment {
-            case let .plain(text):
-                return text
-            case let .phrase(phrase):
-                phraseIndex += 1
-                return keep.contains(phraseIndex) ? "\(MixedTranslation.open)\(phrase.english) | \(phrase.japanese)\(MixedTranslation.close)" : phrase.japanese
-            }
-        }.joined()
-        let kept = keep.map { phrases[$0] }
-        var result = MixedTranslation.parse(raw, knownTerms: kept.filter(\.isLearned).map(\.english), triedTerms: kept.filter { !$0.isLearned }.map(\.english))
-        guard keep.count < shown.count else { return result }
-        // 段落の文字と語句を順にたどって、日本語に戻した語句の位置を探す(英語と日本語の間に足した空白は飛ばす)
-        let text = result.text as NSString
-        var cursor = 0
-        phraseIndex = -1
-        for segment in segments {
-            var piece = ""
-            var back: GlossedPhrase?
-            switch segment {
-            case let .plain(plain):
-                piece = plain
-            case let .phrase(phrase):
-                phraseIndex += 1
-                piece = keep.contains(phraseIndex) ? phrase.english : phrase.japanese
-                if shown.contains(phraseIndex), !keep.contains(phraseIndex) { back = phrase }
-            }
-            guard !piece.isEmpty else { continue }
-            let found = text.range(of: piece, range: NSRange(location: cursor, length: text.length - cursor))
-            guard found.location != NSNotFound else { continue }
-            if let back {
-                result.revealedTerms.append(KeptTerm(range: found, english: back.english, japanese: back.japanese, term: back.english, isLearned: back.isLearned))
-            }
-            cursor = NSMaxRange(found)
+        func term(_ phrase: GlossedPhrase, _ piece: String) -> KeptTerm {
+            KeptTerm(range: NSRange(location: (text as NSString).length, length: (piece as NSString).length), english: phrase.english, japanese: phrase.japanese, term: phrase.english, isLearned: phrase.isLearned)
         }
-        return result
+        for segment in segments {
+            var phrase: GlossedPhrase?
+            if case let .phrase(item) = segment, shown.contains(phraseIndex + 1) { phrase = item }
+            if case .phrase = segment { phraseIndex += 1 }
+            if let phrase, !revealed.contains(phrase.english.lowercased()) {
+                if let last = text.unicodeScalars.last, MixedTranslation.isJapanese(last) || CharacterSet.letters.contains(last) { text += " " }
+                kept.append(term(phrase, phrase.english))
+                text += phrase.english
+                spacesNext = true
+                continue
+            }
+            let piece: String = switch segment {
+            case let .plain(plain): plain
+            case let .phrase(item): item.japanese
+            }
+            if spacesNext, let first = piece.unicodeScalars.first, MixedTranslation.isJapanese(first) { text += " " }
+            spacesNext = false
+            if let phrase { back.append(term(phrase, piece)) }
+            text += piece
+        }
+        return MixedTranslation(text: text, kept: kept, japanese: japanese, revealedTerms: back)
     }
 
     // 原文のまま読み、難しい語句から順に、全体の 1 割ほどまで日本語を添える。押した語句にも日本語を添える。

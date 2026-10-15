@@ -11,6 +11,20 @@ public struct KeptTerm: Equatable, Sendable {
     public var isLearned: Bool
 }
 
+// 訳の一続きの文字。kept は色を付けた英語、phrase は色を付けずに押せる英語(90%)、revealed は押して日本語にした語句
+public struct MixedRun: Equatable, Sendable {
+    public enum Kind: Equatable, Sendable { case plain, kept, phrase, revealed }
+    public var text: String
+    public var kind: Kind
+    public var term: KeptTerm? = nil
+
+    public init(text: String, kind: Kind, term: KeptTerm? = nil) {
+        self.text = text
+        self.kind = kind
+        self.term = term
+    }
+}
+
 // 英文を和訳し、覚えた表現(Book で ✓)だけを英語のまま残したもの。
 // 覚えた表現が増えるほど、訳の中の英語の割合が上がっていく
 public struct MixedTranslation: Equatable, Sendable {
@@ -32,6 +46,28 @@ public struct MixedTranslation: Equatable, Sendable {
     // その位置にある、押せる語句。英語のままの語句と、日本語にした語句の両方を探す
     public func clickable(at location: Int) -> KeptTerm? {
         (clickable + revealedTerms).first { NSLocationInRange(location, $0.range) }
+    }
+
+    // 訳を、普通の文字と押せる語句の並びにしたもの。語句が重なったときは先に始まるほうを取る
+    public var runs: [MixedRun] {
+        let ns = text as NSString
+        let colored = Set(kept.map(\.range.location))
+        let back = Set(revealedTerms.map(\.range.location))
+        let terms = (clickable + revealedTerms).enumerated()
+            .sorted { ($0.element.range.location, $0.offset) < ($1.element.range.location, $1.offset) }
+            .map(\.element)
+        var runs: [MixedRun] = []
+        var at = 0
+        for term in terms where term.range.location >= at {
+            if term.range.location > at {
+                runs.append(MixedRun(text: ns.substring(with: NSRange(location: at, length: term.range.location - at)), kind: .plain))
+            }
+            let kind: MixedRun.Kind = back.contains(term.range.location) ? .revealed : colored.contains(term.range.location) ? .kept : .phrase
+            runs.append(MixedRun(text: ns.substring(with: term.range), kind: kind, term: term))
+            at = NSMaxRange(term.range)
+        }
+        if at < ns.length { runs.append(MixedRun(text: ns.substring(from: at), kind: .plain)) }
+        return runs
     }
 
     public static let open: Character = "⟦"

@@ -2,13 +2,32 @@ import GlossCore
 import SwiftUI
 
 struct TranslatePage: View {
+    @Environment(SettingsStore.self) private var settings
+
     var body: some View {
-        VStack(spacing: 0) {
-            SourceEditor()
-            TranslateControls()
-            Divider()
-            TranslationResult()
-            ExtractedWords()
+        Group {
+            if settings.state.sideBySide {
+                VStack(spacing: 0) {
+                    TranslateControls()
+                    Divider()
+                    HStack(spacing: 0) {
+                        SourceEditor()
+                        Divider()
+                        VStack(spacing: 0) {
+                            TranslationResult()
+                            ExtractedWords()
+                        }
+                    }
+                }
+            } else {
+                VStack(spacing: 0) {
+                    SourceEditor()
+                    TranslateControls()
+                    Divider()
+                    TranslationResult()
+                    ExtractedWords()
+                }
+            }
         }
         .background(Color(nsColor: .textBackgroundColor))
     }
@@ -86,6 +105,15 @@ private struct TranslateControls: View {
             .labelsHidden()
             .fixedSize()
 
+            Button {
+                settings.setSideBySide(!settings.state.sideBySide)
+            } label: {
+                Image(systemName: settings.state.sideBySide ? "rectangle.split.1x2" : "rectangle.split.2x1")
+            }
+            .buttonStyle(.borderless)
+            .keyboardShortcut("\\", modifiers: .command)
+            .help(settings.state.sideBySide ? "Show the text above the translation (⌘\\)" : "Show the text and the translation side by side (⌘\\)")
+
             Spacer()
 
             if translate.state.isFromCache {
@@ -139,19 +167,44 @@ private struct TranslationResult: View {
         return MixedText.make(mixed)
     }
 
+    private var runs: [MixedRun] {
+        guard let mixed = translate.state.mixed, translate.state.level != .japanese else {
+            return [MixedRun(text: translate.state.translation, kind: .plain)]
+        }
+        return mixed.runs
+    }
+
+    private var isMarkdown: Bool {
+        !translate.state.isTranslating && MarkdownText.looksLikeMarkdown(runs.map(\.text).joined())
+    }
+
     var body: some View {
+        let markdown = isMarkdown && translate.showsMarkdown ? MarkdownView.make(MarkdownText.pieces(runs)) : nil
         GlossTextView(
             text: .constant(translate.state.translation),
-            attributedText: mixedText,
+            attributedText: markdown?.text ?? mixedText,
             isEditable: false,
             onSelect: translate.select,
             onMouseSelect: {
                 translate.noteAsked($0)
                 ask.askAboutMouseSelection($0, source: translate.state.sourceText, translation: translate.state.translation)
             },
-            onClick: translate.reveal(at:)
+            onClick: { location in
+                guard let markdown else { return translate.reveal(at: location) }
+                if let term = markdown.terms.first(where: { NSLocationInRange(location, $0.range) })?.term { translate.reveal(term.english) }
+            }
         )
         .overlay { ResultMessage() }
+        .overlay(alignment: .topTrailing) {
+            if isMarkdown {
+                @Bindable var translate = translate
+                Toggle("Markdown", isOn: $translate.showsMarkdown)
+                    .toggleStyle(.button)
+                    .controlSize(.small)
+                    .padding(8)
+                    .help("Show the Markdown as headings, lists and tables, or as plain text")
+            }
+        }
         .frame(maxHeight: .infinity)
         .overlay(alignment: .bottom) {
             if showsAskButton {
@@ -289,6 +342,64 @@ enum MixedText {
             ], range: item.range)
         }
         return result
+    }
+}
+
+// Markdown を描画した訳。押せる語句は素の訳と同じ飾りにし、押した位置から語句を引けるよう位置を持つ
+enum MarkdownView {
+    static func make(_ pieces: [MarkdownPiece]) -> (text: NSAttributedString, terms: [(range: NSRange, term: KeptTerm)]) {
+        let result = NSMutableAttributedString()
+        var terms: [(range: NSRange, term: KeptTerm)] = []
+        for piece in pieces {
+            var attributes = GlossTextView.attributes
+            var font = NSFont.systemFont(ofSize: 15)
+            let paragraph = (attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+            paragraph.paragraphSpacing = 8
+            switch piece.block {
+            case let .heading(level):
+                font = .systemFont(ofSize: max(22 - CGFloat(level) * 2, 15), weight: .bold)
+                paragraph.paragraphSpacingBefore = 6
+            case .code:
+                font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+                paragraph.paragraphSpacing = 0
+                attributes[.backgroundColor] = NSColor.quaternaryLabelColor
+            case .quote:
+                paragraph.headIndent = 14
+                paragraph.firstLineHeadIndent = 14
+                attributes[.foregroundColor] = NSColor.secondaryLabelColor
+            case .tableHeader:
+                font = .systemFont(ofSize: 15, weight: .semibold)
+                paragraph.tabStops = (1...8).map { NSTextTab(textAlignment: .left, location: CGFloat($0) * 160) }
+            case .tableCell:
+                paragraph.tabStops = (1...8).map { NSTextTab(textAlignment: .left, location: CGFloat($0) * 160) }
+            case .paragraph:
+                break
+            }
+            if piece.code { font = .monospacedSystemFont(ofSize: 14, weight: .regular) }
+            if piece.bold { font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) }
+            if piece.italic { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
+            if piece.link {
+                attributes[.foregroundColor] = NSColor.linkColor
+                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            }
+            switch piece.run?.kind {
+            case .kept:
+                font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+                attributes[.foregroundColor] = NSColor.controlAccentColor
+            case .revealed:
+                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue
+                attributes[.underlineColor] = NSColor.controlAccentColor
+            default:
+                break
+            }
+            attributes[.font] = font
+            attributes[.paragraphStyle] = paragraph
+            if let term = piece.run?.term {
+                terms.append((NSRange(location: result.length, length: (piece.text as NSString).length), term))
+            }
+            result.append(NSAttributedString(string: piece.text, attributes: attributes))
+        }
+        return (result, terms)
     }
 }
 

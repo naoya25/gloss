@@ -11,6 +11,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var englishLevel: EnglishLevel = .thirty
     // 今の段階で読んだ直近の英文の、英語のまま読めた割合。段階が変わったら空にする
     public var recentReads: [Int] = []
+    // Translate で原文と訳を左右に並べるか。false は上下
+    public var sideBySide = false
 
     public init() {}
 
@@ -26,6 +28,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         syncURL = try container.decodeIfPresent(String.self, forKey: .syncURL) ?? syncURL
         englishLevel = try container.decodeIfPresent(EnglishLevel.self, forKey: .englishLevel) ?? englishLevel
         recentReads = try container.decodeIfPresent([Int].self, forKey: .recentReads) ?? recentReads
+        sideBySide = try container.decodeIfPresent(Bool.self, forKey: .sideBySide) ?? sideBySide
     }
 
     // TraPoP の設定(com.naoya-otsuka.trapop/config.json)を初回だけ引き継ぐ

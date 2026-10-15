@@ -6,7 +6,8 @@ import { lessonBrief } from "./lessonBrief";
 import { choiceOptions, isExactAnswer, nextMastery, pickQuestions, questionWeight } from "./quiz";
 import { bookSize, lastDays, quizTotals, streak } from "./report";
 import { pickVoice } from "./speech";
-import { japaneseOf, joinGraded, levelAbove, nextLevel, parseGraded, phrasesOf, readAbility, readingPoints, render, splitParts } from "./graded";
+import { looksLikeMarkdown, markdownHtml } from "./markdown";
+import { japaneseOf, joinGraded, levelAbove, nextLevel, parseGraded, phrasesOf, readAbility, readingPoints, render, runsOf, splitParts, type Level } from "./graded";
 import { matchesQuery, recallStreaks } from "./recall";
 import { sortWords } from "../pages/book/store";
 import { activityRow, didPushWords, mergeActivity, mergeWords, wordRows } from "./sync";
@@ -279,5 +280,41 @@ describe("graded translation", () => {
     expect(parts.join("\n\n")).toBe(text);
     const one = parseGraded("⟦word | 語 | 1⟧です", [], "word");
     expect(japaneseOf(joinGraded([one, one], "word\n\nword"))).toBe("語です\n\n語です");
+  });
+});
+
+describe("runsOf", () => {
+  it("splits the translation into text and clickable phrases", () => {
+    const source = "# Release notes\n\n- **Fix** the login timeout\n- Check the edge case";
+    const raw = "# ⟦release notes | リリースノート | 2⟧\n\n- **⟦fix | 修正 | 1⟧** ⟦login timeout | ログインのタイムアウト | 3⟧\n- ⟦edge case | 想定外のケース | 4⟧を⟦check | 確認 | 1⟧する";
+    const graded = parseGraded(raw, ["check"], source);
+    for (const level of [90, 50, 30, 10, 0] as Level[]) {
+      for (const revealed of [new Set<string>(), new Set(["check", "fix"])]) {
+        const rendered = render(graded, level, revealed);
+        expect(runsOf(rendered).map((run) => run.text).join("")).toBe(rendered.text);
+      }
+    }
+    const fifty = runsOf(render(graded, 50, new Set(["fix"])));
+    expect(fifty.find((run) => run.item?.english === "fix")).toMatchObject({ text: "修正", kind: "revealed" });
+    expect(fifty.find((run) => run.item?.english === "check")?.kind).toBe("kept");
+    expect(runsOf(render(graded, 90)).find((run) => run.item?.english === "fix")?.kind).toBe("phrase");
+  });
+});
+
+describe("markdownHtml", () => {
+  it("renders Markdown and keeps phrases clickable", () => {
+    const source = "# Release notes\n\n- **Fix** the login timeout\n\n| Name | State |\n| --- | --- |\n| hotfix | done |\n\n![hotfix](a.png) <b>x</b>";
+    const raw = "# ⟦release notes | リリースノート | 2⟧\n\n- **⟦fix | 修正 | 1⟧** ⟦login timeout | ログインのタイムアウト | 3⟧\n\n| 名前 | 状態 |\n| --- | --- |\n| ⟦hotfix | 緊急修正 | 4⟧ | 完了 |\n\n![⟦hotfix | 緊急修正 | 4⟧](a.png) <b>x</b>";
+    const graded = parseGraded(raw, ["fix"], source);
+    expect(looksLikeMarkdown(source)).toBe(true);
+    expect(looksLikeMarkdown("FYI, I pushed a hotfix. Let's check it.")).toBe(false);
+    const runs = runsOf(render(graded, 50, new Set(["release notes"])));
+    const html = markdownHtml(runs);
+    expect(html).toContain("<h1>");
+    expect(html).toMatch(/<strong><button type="button" class="kept learned" data-run="\d+">fix<\/button><\/strong>/);
+    expect(html).toMatch(/<td><button[^>]*>hotfix<\/button><\/td>|<td>緊急修正<\/td>/);
+    expect(html).toContain('class="revealed"');
+    expect(html).toContain("&lt;b&gt;x&lt;/b&gt;");
+    expect(html).not.toMatch(/alt="[^"]*<button/);
   });
 });

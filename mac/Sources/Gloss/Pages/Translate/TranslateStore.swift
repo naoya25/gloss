@@ -39,6 +39,8 @@ struct TranslateState {
 @Observable
 final class TranslateStore {
     private(set) var state = TranslateState()
+    // 訳が Markdown のとき、記号のままでなく見出しや箇条書きにして出すか。次の英文でもそのまま使う
+    var showsMarkdown = true
     private let settings: SettingsStore
     private let history: HistoryStore
     private let activity: ActivityStore
@@ -118,8 +120,13 @@ final class TranslateStore {
     // 押した位置の英語の語句を日本語にする。日本語にした語句をもう一度押すと英語に戻す。
     // 記録するときに日本語のままの語句を、読めなかった語句として数える
     func reveal(at location: Int) {
-        guard !state.isRead, let phrase = state.mixed?.clickable(at: location) else { return }
-        let key = phrase.english.lowercased()
+        guard let phrase = state.mixed?.clickable(at: location) else { return }
+        reveal(phrase.english)
+    }
+
+    func reveal(_ english: String) {
+        guard !state.isRead else { return }
+        let key = english.lowercased()
         if state.revealed.remove(key) == nil { state.revealed.insert(key) }
     }
 
