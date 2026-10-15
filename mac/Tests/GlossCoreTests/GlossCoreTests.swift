@@ -80,7 +80,7 @@ import Testing
     let settings = #"{"engine":"openai","model":"m","jaiUserID":"","target":"auto"}"#
     let decodedSettings = try decoder.decode(AppSettings.self, from: Data(settings.utf8))
     #expect(decodedSettings.engine == .openai)
-    #expect(decodedSettings.wordSort == .stale)
+    #expect(decodedSettings.wordSort == .recommended)
 }
 
 @Test func cardPairIsParsed() throws {
