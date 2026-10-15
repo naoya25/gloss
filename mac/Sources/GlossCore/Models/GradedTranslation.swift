@@ -19,6 +19,18 @@ public enum EnglishLevel: Int, CaseIterable, Identifiable, Codable, Sendable {
     public static func above(_ ability: Int) -> EnglishLevel {
         allCases.sorted { $0.rawValue < $1.rawValue }.first { $0.rawValue > ability } ?? .ninety
     }
+
+    public static let readsToRise = 5
+
+    // 1回押さずに読んだだけで上げると、訳しただけで読み忘れた英文でも上がってしまうため、上げるのは直近の平均で決める
+    public func next(ability: Int, recent: [Int]) -> (level: EnglishLevel, recent: [Int]) {
+        let fallen = Self.above(ability)
+        if fallen.rawValue < rawValue { return (fallen, []) }
+        let reads = Array((recent + [ability]).suffix(Self.readsToRise))
+        let average80 = reads.reduce(0, +) * 5 >= rawValue * 4 * reads.count
+        guard reads.count == Self.readsToRise, average80, self != .ninety else { return (self, reads) }
+        return (Self.above(rawValue), [])
+    }
 }
 
 // 訳の中の英語の語句1つ。difficulty は AI が付けたやさしさ(1 やさしい〜5 難しい)。Book で ✓ の語は 0

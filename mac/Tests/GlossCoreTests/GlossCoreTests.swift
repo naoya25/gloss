@@ -622,3 +622,22 @@ private func word(_ term: String, updatedAt millis: Int64? = nil) -> WordEntry {
     let checkBack = try! #require(glossedCheck.revealedTerms.first)
     #expect((glossedCheck.text as NSString).substring(with: checkBack.range) == "check（確認する）")
 }
+
+@Test func levelRisesOnlyAfterFiveReadsAveragingEightyPercent() {
+    // 押さずに読んでも、1回では上がらない
+    var step = EnglishLevel.thirty.next(ability: 30, recent: [])
+    #expect(step.level == .thirty)
+    #expect(step.recent == [30])
+    for _ in 0..<3 { step = EnglishLevel.thirty.next(ability: 30, recent: step.recent) }
+    #expect(step.level == .thirty)
+    step = EnglishLevel.thirty.next(ability: 30, recent: step.recent)
+    #expect(step.level == .fifty)
+    #expect(step.recent.isEmpty)
+    // 少し押した回が混じっても、平均が8割以上なら上がる
+    #expect(EnglishLevel.thirty.next(ability: 20, recent: [30, 30, 30, 30]).level == .fifty)
+    #expect(EnglishLevel.thirty.next(ability: 20, recent: [20, 30, 20, 20]).level == .thirty)
+    // 押しすぎた回はすぐ下がる
+    #expect(EnglishLevel.fifty.next(ability: 25, recent: [50, 50, 50, 50]) == (.thirty, []))
+    #expect(EnglishLevel.ninety.next(ability: 90, recent: [90, 90, 90, 90]).level == .ninety)
+    #expect(EnglishLevel.japanese.next(ability: 0, recent: [0, 0, 0, 0]).level == .ten)
+}

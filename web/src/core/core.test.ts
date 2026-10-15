@@ -6,7 +6,7 @@ import { lessonBrief } from "./lessonBrief";
 import { choiceOptions, isExactAnswer, nextMastery, pickQuestions, questionWeight } from "./quiz";
 import { bookSize, lastDays, quizTotals, streak } from "./report";
 import { pickVoice } from "./speech";
-import { japaneseOf, joinGraded, levelAbove, parseGraded, phrasesOf, readAbility, readingPoints, render, splitParts } from "./graded";
+import { japaneseOf, joinGraded, levelAbove, nextLevel, parseGraded, phrasesOf, readAbility, readingPoints, render, splitParts } from "./graded";
 import { matchesQuery, recallStreaks } from "./recall";
 import { sortWords } from "../pages/book/store";
 import { activityRow, didPushWords, mergeActivity, mergeWords, wordRows } from "./sync";
@@ -237,6 +237,18 @@ describe("graded translation", () => {
     expect(render(graded, 50).text).toContain("push しました");
     expect(render(graded, 90).text.startsWith("FYI, I pushed a hotfix")).toBe(true);
     expect(readingPoints(render(graded, 0), 0)).toBe(0);
+  });
+  it("moves up only after five reads averaging 80%, like the Mac", () => {
+    let step = nextLevel(30, 30, []);
+    expect(step).toEqual({ level: 30, recent: [30] });
+    for (let i = 0; i < 3; i++) step = nextLevel(30, 30, step.recent);
+    expect(step.level).toBe(30);
+    expect(nextLevel(30, 30, step.recent)).toEqual({ level: 50, recent: [] });
+    expect(nextLevel(30, 20, [30, 30, 30, 30]).level).toBe(50);
+    expect(nextLevel(30, 20, [20, 30, 20, 20]).level).toBe(30);
+    expect(nextLevel(50, 25, [50, 50, 50, 50])).toEqual({ level: 30, recent: [] });
+    expect(nextLevel(90, 90, [90, 90, 90, 90]).level).toBe(90);
+    expect(nextLevel(0, 0, [0, 0, 0, 0]).level).toBe(10);
   });
   it("turns tapped phrases into Japanese and lowers the next level, like the Mac", () => {
     const graded = parseGraded(raw, ["hotfix"], source);

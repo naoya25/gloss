@@ -155,6 +155,19 @@ export function levelAbove(ability: number): Level {
   return ([0, 10, 30, 50, 90] as Level[]).find((level) => level > ability) ?? 90;
 }
 
+export const READS_TO_RISE = 5;
+
+// 次の英文の段階(Mac の EnglishLevel.next と同じ)。1回押さずに読んだだけで上げると、
+// 訳しただけで読み忘れた英文でも上がってしまうため、上げるのは直近の平均で決める
+export function nextLevel(level: Level, ability: number, recent: number[]): { level: Level; recent: number[] } {
+  const fallen = levelAbove(ability);
+  if (fallen < level) return { level: fallen, recent: [] };
+  const reads = [...recent, ability].slice(-READS_TO_RISE);
+  const average80 = reads.reduce((a, b) => a + b, 0) * 5 >= level * 4 * reads.length;
+  if (reads.length < READS_TO_RISE || !average80 || level === 90) return { level, recent: reads };
+  return { level: levelAbove(level), recent: [] };
+}
+
 // ✓ の語は必ず英語にし、残りはやさしい語句から順に、英語に戻せる語句(の文字数)の level% まで英語に戻す
 function japaneseBased(graded: Graded, level: number, revealed: Set<string>): Rendered {
   const phrases = phrasesOf(graded);

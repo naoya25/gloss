@@ -1,6 +1,6 @@
 import { Fragment, useEffect, type ReactNode } from "react";
-import { LEVELS, levelAbove, phrasesOf, readAbility, readingPoints, render, type Kept } from "../../core/graded";
-import { useTranslate } from "./store";
+import { LEVELS, READS_TO_RISE, nextLevel, phrasesOf, readAbility, readingPoints, render, type Kept } from "../../core/graded";
+import { savedRecent, useTranslate } from "./store";
 
 export function TranslatePage() {
   const { source, graded, level, translating, progress, error, revealed, setSource, setLevel, reveal, translate, recordReading, reset } = useTranslate();
@@ -8,6 +8,7 @@ export function TranslatePage() {
   const phrases = graded ? phrasesOf(graded).length : 0;
   const points = rendered ? readingPoints(rendered, level) : 0;
   const ability = graded ? readAbility(graded, level, revealed) : 0;
+  const next = nextLevel(level, ability, savedRecent());
 
   // ページを閉じたときに、そこまで読んだ分を記録する。ほかの画面に移っただけなら記録しない
   // (記録したあとは押せなくなるので、戻ってきて続きを読めなくなる)。戻れる形で隠れたとき(persisted)も記録しない
@@ -68,7 +69,8 @@ export function TranslatePage() {
           {translating && <p className="sub">Translating… {progress[0]}/{progress[1]}</p>}
           {!translating && (
             <p className="sub">
-              Read {ability}% in English · next text at {LEVELS.find((item) => item.level === levelAbove(ability))!.label} · +{points} pt
+              Read {ability}% in English · next text at {LEVELS.find((item) => item.level === next.level)!.label}
+              {next.level === level && level !== 90 && ` (${next.recent.length}/${READS_TO_RISE} to move up)`} · +{points} pt
             </p>
           )}
         </>

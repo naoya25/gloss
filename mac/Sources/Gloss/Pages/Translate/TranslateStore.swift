@@ -27,9 +27,8 @@ struct TranslateState {
 
     var mixed: MixedTranslation? { graded?.rendered(level, revealed: revealed) }
     var pendingPoints: Int { level == .japanese ? 0 : mixed?.readingPoints(excluding: askedTerms) ?? 0 }
-    // ここまでで英語のまま読めた割合と、それで決まる次の英文の段階
+    // ここまでで英語のまま読めた割合
     var ability: Int? { graded.map { $0.readAbility(level, revealed: revealed) } }
-    var nextLevel: EnglishLevel? { ability.map(EnglishLevel.above) }
 
     var canTranslate: Bool {
         !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sourceImage != nil
@@ -105,6 +104,11 @@ final class TranslateStore {
         }
     }
 
+    // ここまで読んだ分で決まる次の英文の段階と、上がるまでに数えた英文の数
+    var next: (level: EnglishLevel, recent: [Int])? {
+        state.ability.map { state.level.next(ability: $0, recent: settings.state.recentReads) }
+    }
+
     // 段階を変えると、その場で訳を作り直す(AI は呼ばない)
     func setLevel(_ level: EnglishLevel) {
         state.level = level
@@ -121,7 +125,7 @@ final class TranslateStore {
 
     // 読み終えた分を記録する。次の英文を貼ったとき・履歴を開いたとき・Gloss を閉じるときに呼ぶ。
     // ほかの画面に移ったときは呼ばない。記録したあとは押せなくなるので、戻ってきて続きを読めなくなる。
-    // 英語のまま読めた割合の1段上を次の英文の段階にし、押した語句は Book で ? にする
+    // 次の英文の段階は EnglishLevel.next で決め、押した語句は Book で ? にする
     func recordReading() {
         guard let graded = state.graded, !graded.phrases.isEmpty, let mixed = state.mixed, let ability = state.ability,
               !state.isRead, !state.isTranslating
@@ -135,7 +139,8 @@ final class TranslateStore {
             detail: "\(state.level.label) · " + mixed.keptTerms.joined(separator: ", "),
             points: state.pendingPoints
         ))
-        settings.setEnglishLevel(EnglishLevel.above(ability))
+        let next = state.level.next(ability: ability, recent: settings.state.recentReads)
+        settings.setEnglishLevel(next.level, recentReads: next.recent)
         for phrase in graded.phrases where state.revealed.contains(phrase.english.lowercased()) {
             markUnsure(term: phrase.english, meaning: phrase.japanese)
         }

@@ -292,8 +292,8 @@ enum MixedText {
     }
 }
 
-// 段階は、前に読んだ英文で英語のまま読めた割合の1段上から始まる。分からない英語を押すと日本語になり(もう一度押すと英語に戻る)、
-// 日本語のままの分だけ次の段階が下がる。読んだ記録は、次の英文を貼ったときに自動で残す。
+// 段階は、直近5回の英文で英語のまま読めた割合が平均8割以上なら1段上がる。分からない英語を押すと日本語になり(もう一度押すと英語に戻る)、
+// 押しすぎると次の英文で下がる。読んだ記録は、次の英文を貼ったときに自動で残す。
 // 訳を読む高さを取るため、上の段に1行で置き、内訳は指を置いたときの説明に回す。段階は ⌘1〜⌘5 でも変えられる
 private struct ReadLevelControls: View {
     @Environment(TranslateStore.self) private var translate
@@ -310,12 +310,12 @@ private struct ReadLevelControls: View {
                 .controlSize(.small)
                 .fixedSize()
                 .help("How much of the translation to leave in English (⌘1–⌘5)")
-                if let ability = state.ability, let next = state.nextLevel, !state.isTranslating {
-                    Text("\(ability)% → next \(next.label) · +\(state.pendingPoints) pt")
+                if let ability = state.ability, let next = translate.next, !state.isTranslating {
+                    Text("\(ability)% → next \(next.level.label) · +\(state.pendingPoints) pt")
                         .font(.callout.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.tint)
                         .fixedSize()
-                        .help(Self.summary(mixed: mixed, phraseCount: graded.phrases.count, level: state.level, ability: ability, next: next))
+                        .help(Self.summary(mixed: mixed, phraseCount: graded.phrases.count, level: state.level, ability: ability, next: next.level, reads: next.level == state.level && state.level != .ninety ? next.recent.count : nil))
                 }
             }
             // ⌘1〜⌘5 で段階を選ぶ。1 が 90%、5 が日本語
@@ -330,11 +330,14 @@ private struct ReadLevelControls: View {
     }
 
     // 段階の % は「英語に戻せる語句のうち何割を英語にするか」。コードや表の多い文書では、訳全体の英語の割合はそれより低くなるので、両方を出す
-    static func summary(mixed: MixedTranslation, phraseCount: Int, level: EnglishLevel, ability: Int, next: EnglishLevel) -> String {
+    static func summary(mixed: MixedTranslation, phraseCount: Int, level: EnglishLevel, ability: Int, next: EnglishLevel, reads: Int?) -> String {
         var lines = [
             "Click English you don't know to see it in Japanese. Click it again to go back to English.",
             "Read \(ability)% in English, so the next text starts at \(next.label). Recorded when you paste the next text.",
         ]
+        if let reads {
+            lines.append("Moves up when you read 80% or more in English on average over \(EnglishLevel.readsToRise) texts (\(reads) of \(EnglishLevel.readsToRise) so far)")
+        }
         switch level {
         case .japanese: lines.append("Everything in Japanese")
         case .ninety: lines.append("The original English, with Japanese for the hardest phrases · \(mixed.englishRate)% of the text in English")

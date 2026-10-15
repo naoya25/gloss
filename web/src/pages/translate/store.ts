@@ -1,11 +1,13 @@
 import { create } from "zustand";
-import { containsWord, isEnglish, joinGraded, levelAbove, parseGraded, phrasesOf, readAbility, render, readingPoints, splitParts, type Graded, type Level } from "../../core/graded";
+import { containsWord, isEnglish, joinGraded, nextLevel, parseGraded, phrasesOf, readAbility, render, readingPoints, splitParts, type Graded, type Level } from "../../core/graded";
 import { Mastery } from "../../core/models";
 import { useActivity } from "../../stores/activity";
 import { currentApi } from "../../stores/sync";
 import { useWords } from "../../stores/words";
 
 const LEVEL_KEY = "gloss-english-level";
+// 今の段階で読んだ直近の英文の、英語のまま読めた割合。段階が変わったら空にする
+const RECENT_KEY = "gloss-english-recent";
 
 function savedLevel(): Level {
   try {
@@ -16,9 +18,19 @@ function savedLevel(): Level {
   }
 }
 
-function storeLevel(level: Level) {
+export function savedRecent(): number[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(value) ? value.filter((item): item is number => typeof item === "number") : [];
+  } catch {
+    return [];
+  }
+}
+
+function storeLevel(level: Level, recent: number[] = []) {
   try {
     localStorage.setItem(LEVEL_KEY, String(level));
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
   } catch {
     // 保存できなくても、この画面では選んだ段階で読める
   }
@@ -105,7 +117,7 @@ export const useTranslate = create<TranslateState>()((setState, getState) => ({
       setState({ translating: false });
     }
   },
-  // 読み終えた分を記録する(Mac の recordReading と同じ)。英語のまま読めた割合の1段上を次の英文の段階にし、
+  // 読み終えた分を記録する(Mac の recordReading と同じ)。次の英文の段階は nextLevel で決め、
   // 押した語句は Book で ? にする(Book に無い語句は Mac で入る)
   recordReading() {
     const { graded, level, read, revealed, source, translating } = getState();
@@ -121,7 +133,8 @@ export const useTranslate = create<TranslateState>()((setState, getState) => ({
       points: readingPoints(rendered, level),
     });
     // 今の訳の段階は変えず、次の英文から使う
-    storeLevel(levelAbove(readAbility(graded, level, revealed)));
+    const next = nextLevel(level, readAbility(graded, level, revealed), savedRecent());
+    storeLevel(next.level, next.recent);
     const words = useWords.getState();
     for (const word of words.words) {
       const term = (word.english || word.term).toLowerCase();
